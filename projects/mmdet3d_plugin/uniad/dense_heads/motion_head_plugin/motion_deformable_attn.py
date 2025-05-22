@@ -179,6 +179,10 @@ class MotionTransformerAttentionLayer(BaseModule):
         Returns:
             Tensor: forwarded results with shape [num_queries, bs, embed_dims].
         """
+        # --------创建CUDA事件用于计时
+        # start_event = torch.cuda.Event(enable_timing=True)
+        # end_event = torch.cuda.Event(enable_timing=True)
+        # start_event.record()
 
         norm_index = 0
         attn_index = 0
@@ -236,6 +240,10 @@ class MotionTransformerAttentionLayer(BaseModule):
                 query = self.ffns[ffn_index](
                     query, identity if self.pre_norm else None)
                 ffn_index += 1
+        # end_event.record()
+        # torch.cuda.synchronize()
+        # elapsed_time_ms = start_event.elapsed_time(end_event)
+        # print(f"MotionTransformerAttentionLayer执行时间: {elapsed_time_ms} 毫秒")
 
         return query
 
@@ -396,6 +404,9 @@ class MotionDeformableAttention(BaseModule):
         Returns:
              Tensor: forwarded results with shape [num_query, bs, embed_dims].
         """
+        start_event2 = torch.cuda.Event(enable_timing=True)
+        end_event2 = torch.cuda.Event(enable_timing=True)
+        start_event2.record()
         bs, num_agent, num_mode, _ = query.shape
         num_query = num_agent * num_mode
         if value is None:
@@ -468,7 +479,13 @@ class MotionDeformableAttention(BaseModule):
         output = torch.flatten(output, start_dim=2, end_dim=3)
         output = self.output_proj(output)
         output = output.view(bs, num_agent, num_mode, -1)
+
+        end_event2.record()
+        torch.cuda.synchronize()
+        elapsed_time_ms = start_event2.elapsed_time(end_event2)
+        # print(f"MotionDeformableAttention执行时间: {elapsed_time_ms} 毫秒")
         return self.dropout(output) + identity
+
 
     def agent_coords_to_ego_coords(self, reference_trajs, bbox_results):
         batch_size = len(bbox_results)

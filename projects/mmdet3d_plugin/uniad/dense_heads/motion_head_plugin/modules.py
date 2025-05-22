@@ -89,15 +89,30 @@ class MotionTransformerDecoder(BaseModule):
         Returns:
             None
         """
+
         intermediate = []
         intermediate_reference_trajs = []
+
+        # --------创建CUDA事件用于计时
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
 
         B, _, P, D = agent_level_embedding.shape
         track_query_bc = track_query.unsqueeze(2).expand(-1, -1, P, -1)  # (B, A, P, D)
         track_query_pos_bc = track_query_pos.unsqueeze(2).expand(-1, -1, P, -1)  # (B, A, P, D)
 
         # static intention embedding, which is imutable throughout all layers
+        start_event.record()
+
         agent_level_embedding = self.intention_interaction_layers(agent_level_embedding)
+        # 计算第一个时间
+        first_end_event = torch.cuda.Event(enable_timing=True)
+        first_end_event.record()
+        torch.cuda.synchronize()
+        first_elapsed_time_ms = start_event.elapsed_time(first_end_event)
+        
+
+        
         static_intention_embed = agent_level_embedding + scene_level_offset_embedding + learnable_embed
         reference_trajs_input = reference_trajs.unsqueeze(4).detach()
 
@@ -105,24 +120,44 @@ class MotionTransformerDecoder(BaseModule):
         for lid in range(self.num_layers):
             # fuse static and dynamic intention embedding
             # the dynamic intention embedding is the output of the previous layer, which is initialized with anchor embedding
+            
+            # 记录第二个操作开始时间
+            second_start_event = torch.cuda.Event(enable_timing=True)
+            second_start_event.record()
             dynamic_query_embed = self.dynamic_embed_fuser(torch.cat(
                 [agent_level_embedding, scene_level_offset_embedding, scene_level_ego_embedding], dim=-1))
             
+            # 记录第三个操作开始时间
+            third_start_event = torch.cuda.Event(enable_timing=True)
+            third_start_event.record()
             # fuse static and dynamic intention embedding
             query_embed_intention = self.static_dynamic_fuser(torch.cat(
                 [static_intention_embed, dynamic_query_embed], dim=-1))  # (B, A, P, D)
             
+            # 记录第四个操作开始时间
+            fourth_start_event = torch.cuda.Event(enable_timing=True)
+            fourth_start_event.record()
             # fuse intention embedding with query embedding
             query_embed = self.in_query_fuser(torch.cat([query_embed, query_embed_intention], dim=-1))
             
+            # 记录第五个操作开始时间
+            fifth_start_event = torch.cuda.Event(enable_timing=True)
+            fifth_start_event.record()
+            # 执行交互与agent，地图，bev之间的交互
             # interaction between agents
             track_query_embed = self.track_agent_interaction_layers[lid](
                 query_embed, track_query, query_pos=track_query_pos_bc, key_pos=track_query_pos)
             
+            # 记录第七个操作开始时间
+            six_start_event = torch.cuda.Event(enable_timing=True)
+            six_start_event.record()
             # interaction between agents and map
             map_query_embed = self.map_interaction_layers[lid](
                 query_embed, lane_query, query_pos=track_query_pos_bc, key_pos=lane_query_pos)
-            
+
+            # 记录第8个操作开始时间
+            seven_start_event = torch.cuda.Event(enable_timing=True)
+            seven_start_event.record()
             # interaction between agents and bev, ie. interaction between agents and goals
             # implemented with deformable transformer
             bev_query_embed = self.bev_interaction_layers[lid](
@@ -132,11 +167,47 @@ class MotionTransformerDecoder(BaseModule):
                 bbox_results=track_bbox_results,
                 reference_trajs=reference_trajs_input,
                 **kwargs)
+            # 记录第四个操作结束时间
+            seven_end_event = torch.cuda.Event(enable_timing=True)
+            seven_end_event.record()
+            torch.cuda.synchronize()
             
+            second_elapsed_time_ms = second_start_event.elapsed_time(third_start_event)
+            # print(f" 2. dynamic_query_embed = self.dynamic_embed_fuser 执行时间: {second_elapsed_time_ms} 毫秒")
+
+            third_elapsed_time_ms = third_start_event.elapsed_time(fourth_start_event)
+            # print(f" 3. query_embed_intention = self.static_dynamic_fuser 执行时间: {third_elapsed_time_ms} 毫秒")
+
+            fourth_elapsed_time_ms = fourth_start_event.elapsed_time(fifth_start_event)
+            # print(f" 4. query_embed = self.in_query_fuser 执行时间: {fourth_elapsed_time_ms} 毫秒")
+
+            fifth_elapsed_time_ms = fifth_start_event.elapsed_time(six_start_event)
+            # print(f" 5. track_query_embed = self.track_agent_interaction_layers[lid](...) 执行时间: {fifth_elapsed_time_ms} 毫秒")
+
+            six_elapsed_time_ms = six_start_event.elapsed_time(seven_start_event)
+            # print(f" 6. map_query_embed = self.map_interaction_layers[lid](...) 执行时间: {six_elapsed_time_ms} 毫秒")
+
+            seven_elapsed_time_ms = seven_start_event.elapsed_time(seven_end_event)
+            
+
+            # eight_elapsed_time_ms = eight_start_event.elapsed_time(eight_end_event)
+            # print(f"bev_query_embed = self.bev_interaction_layers[lid](...) 执行时间: {eight_elapsed_time_ms} 毫秒")
+            
+
+
+
             # fusing the embeddings from different interaction layers
             query_embed = [track_query_embed, map_query_embed, bev_query_embed, track_query_bc+track_query_pos_bc]
             query_embed = torch.cat(query_embed, dim=-1)
+
+            nine_start_event = torch.cuda.Event(enable_timing=True)
+            nine_start_event.record()
             query_embed = self.out_query_fuser(query_embed)
+            nine_end_event = torch.cuda.Event(enable_timing=True)
+            nine_end_event.record()
+            torch.cuda.synchronize()
+            nine_elapsed_time_ms = nine_start_event.elapsed_time(nine_end_event)
+            
 
             if traj_reg_branches is not None:
                 # update reference trajectory
@@ -168,6 +239,15 @@ class MotionTransformerDecoder(BaseModule):
 
                 intermediate.append(query_embed)
                 intermediate_reference_trajs.append(reference_trajs)
+        
+        # print(f"1. agent_level_embedding = self.intention_interaction_layers(agent_level_embedding) 执行时间: {first_elapsed_time_ms} 毫秒")
+        # print(f" 2. dynamic_query_embed = self.dynamic_embed_fuser 执行时间: {second_elapsed_time_ms} 毫秒")
+        # print(f" 3. query_embed_intention = self.static_dynamic_fuser 执行时间: {third_elapsed_time_ms} 毫秒")
+        # print(f" 4. query_embed = self.in_query_fuser 执行时间: {fourth_elapsed_time_ms} 毫秒")
+        # print(f" 5. track_query_embed = self.track_agent_interaction_layers[lid](...) 执行时间: {fifth_elapsed_time_ms} 毫秒")
+        # print(f" 6. map_query_embed = self.map_interaction_layers[lid](...) 执行时间: {six_elapsed_time_ms} 毫秒")
+        # print(f" 7. bev_query_embed = self.bev_interaction_layers[lid](...) 执行时间: {seven_elapsed_time_ms} 毫秒")
+        # print(f" 9. query_embed = self.out_query_fuser(query_embed) 执行时间: {nine_elapsed_time_ms} 毫秒")
 
         return torch.stack(intermediate), torch.stack(intermediate_reference_trajs)
 

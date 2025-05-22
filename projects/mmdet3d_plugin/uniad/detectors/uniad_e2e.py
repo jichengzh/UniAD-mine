@@ -12,6 +12,8 @@ import os
 from ..dense_heads.seg_head_plugin import IOU
 from .uniad_track import UniADTrack
 from mmdet.models.builder import build_head
+from thop import profile
+import os
 
 @DETECTORS.register_module()
 class UniAD(UniADTrack):
@@ -287,24 +289,78 @@ class UniAD(UniADTrack):
         img = img[0]
         img_metas = img_metas[0]
         timestamp = timestamp[0] if timestamp is not None else None
+        # 轨迹预测
+        events = []
 
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()  # 开始计时
         result = [dict() for i in range(len(img_metas))]
+
+        # 逐模块耗时分析
+        # with open('/home/jichengzhi/mmdetection3d/UniAD/test/profiler_output.txt', 'w') as f:
+        #     with torch.autograd.profiler.profile(use_cuda=True,profile_memory=True) as prof:
+            # with torch.profiler.profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],record_shapes=True,profile_memory=True,with_stack=True) as prof:
+            # with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CUDA]) as prof:  
+            # with torch.profiler.profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs'),) as prof:
         result_track = self.simple_test_track(img, l2g_t, l2g_r_mat, img_metas, timestamp)
+            # table = prof.key_averages().table(sort_by="cuda_time_total")
+            # print(prof.key_averages().table(sort_by="cuda_time_total"))
+            # f.write(table)
+        # prof.export_chrome_trace("/home/jichengzhi/mmdetection3d/UniAD/test/trace2.json")
 
-        # Upsample bev for tiny model        
-        result_track[0] = self.upsample_bev_if_tiny(result_track[0])
+        # Flops和参数两分析
+        # flops_track, params_track = profile(self.simple_test_track, inputs=(img, l2g_t, l2g_r_mat, img_metas, timestamp))
+        # print(f"PlanningHead FLOPs: {flops_track}, Params: {params_track}")
         
+        end_event.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event.elapsed_time(end_event) / 1e3  # 转换为毫秒
+        events.append(('track', elapsed_track))
+
+
+        # Upsample bev for tiny model
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()  # 开始计时        
+        result_track[0] = self.upsample_bev_if_tiny(result_track[0])
+        end_event.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event.elapsed_time(end_event) / 1e3  # 转换为毫秒
+        # events.append(('bev_upsample', elapsed_track))
+
+
         bev_embed = result_track[0]["bev_embed"]
-
+        # 分割任务
         if self.with_seg_head:
-            result_seg =  self.seg_head.forward_test(bev_embed, gt_lane_labels, gt_lane_masks, img_metas, rescale)
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+                start.record()
 
+                result_seg = self.seg_head.forward_test(bev_embed, gt_lane_labels, gt_lane_masks, img_metas, rescale)
+
+                end.record()
+                torch.cuda.synchronize()
+                elapsed = start.elapsed_time(end) / 1e3
+                events.append(('seg', elapsed))
+        # motion head运动预测
         if self.with_motion_head:
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
             result_motion, outs_motion = self.motion_head.forward_test(bev_embed, outs_track=result_track[0], outs_seg=result_seg[0])
             outs_motion['bev_pos'] = result_track[0]['bev_pos']
+            end.record()
+            torch.cuda.synchronize()
+            elapsed = start.elapsed_time(end) / 1e3
+            events.append(('motion', elapsed))
 
         outs_occ = dict()
+        # 占用预测
         if self.with_occ_head:
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
             occ_no_query = outs_motion['track_query'].shape[1] == 0
             outs_occ = self.occ_head.forward_test(
                 bev_embed, 
@@ -315,8 +371,15 @@ class UniAD(UniADTrack):
                 gt_img_is_valid=gt_occ_img_is_valid,
             )
             result[0]['occ'] = outs_occ
-        
+            end.record()
+            torch.cuda.synchronize()
+            elapsed = start.elapsed_time(end) / 1e3
+            events.append(('occ', elapsed))
+        # 规划任务
         if self.with_planning_head:
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
             planning_gt=dict(
                 segmentation=gt_segmentation,
                 sdc_planning=sdc_planning,
@@ -328,7 +391,16 @@ class UniAD(UniADTrack):
                 planning_gt=planning_gt,
                 result_planning=result_planning,
             )
+            end.record()
+            torch.cuda.synchronize()
+            elapsed = start.elapsed_time(end) / 1e3
+            events.append(('planning', elapsed))
 
+        for name, time in events:
+            print(f"[{name.upper()}] 耗时: {time:.3f} s")
+        
+        
+        # 结果清理
         pop_track_list = ['prev_bev', 'bev_pos', 'bev_embed', 'track_query_embeddings', 'sdc_embedding']
         result_track[0] = pop_elem_in_result(result_track[0], pop_track_list)
 
@@ -347,7 +419,7 @@ class UniAD(UniADTrack):
                 res.update(result_motion[i])
             if self.with_seg_head:
                 res.update(result_seg[i])
-
+        # os._exit(0)
         return result
 
 

@@ -20,7 +20,7 @@ from mmdet3d.core.bbox.coders import build_bbox_coder
 from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox
 from mmcv.runner import force_fp32, auto_fp16
 
-
+# from torch.utils.benchmark import Timer
 @HEADS.register_module()
 class BEVFormerTrackHead(DETRHead):
     """Head of Detr3D.
@@ -75,6 +75,7 @@ class BEVFormerTrackHead(DETRHead):
         self.num_cls_fcs = num_cls_fcs - 1
         self.past_steps = past_steps
         self.fut_steps = fut_steps
+        # 采用父类Detrhead的初始化方法，初始化了self.transformer这个参数，创建了transformer层
         super(BEVFormerTrackHead, self).__init__(
             *args, transformer=transformer, **kwargs)
         self.code_weights = nn.Parameter(torch.tensor(
@@ -139,6 +140,9 @@ class BEVFormerTrackHead(DETRHead):
                 nn.init.constant_(m[-1].bias, bias_init)
     
     def get_bev_features(self, mlvl_feats, img_metas, prev_bev=None):
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()  # 开始计时
         bs, num_cam, _, _, _ = mlvl_feats[0].shape
         dtype = mlvl_feats[0].dtype
         bev_queries = self.bev_embedding.weight.to(dtype)
@@ -157,6 +161,10 @@ class BEVFormerTrackHead(DETRHead):
             prev_bev=prev_bev,
             img_metas=img_metas,
         )
+        end_event.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event.elapsed_time(end_event)  # 转换为毫秒
+        print(f'1.1 get_bev_features 耗时 {elapsed_track} ms' )
         return bev_embed, bev_pos
 
     def get_detections(
@@ -166,6 +174,38 @@ class BEVFormerTrackHead(DETRHead):
         ref_points=None,
         img_metas=None,
     ):
+    #     """Get detections from BEV features.
+    #     Args:
+    #         bev_embed (Tensor): BEV features.
+    #         object_query_embeds (Tensor, optional): Object query embeddings. Defaults to None.
+    #         ref_points (Tensor, optional): Reference points. Defaults to None.
+    #         img_metas (list[dict], optional): Image meta information. Defaults to None.
+    #     Returns:
+    #         dict: Predictions.
+    #     """
+    #     # 初始化 Timer
+    #     timer = Timer(stmt="self._get_detections_impl(bev_embed, object_query_embeds, ref_points, img_metas)",
+    #                   globals={"self": self, "bev_embed": bev_embed, "object_query_embeds": object_query_embeds, 
+    #                           "ref_points": ref_points, "img_metas": img_metas})
+    #     # 测量运行时间
+    #     timer_result = timer.blocked_autorange()
+    #     print(f"----------------------------------------------------------第五个模块 BEVFormerTrackHead 的运行时间: {timer_result.mean * 1e3:.4f} ms")
+
+    #     # 调用实际的前向传播逻辑
+    #     return self._get_detections_impl(bev_embed, object_query_embeds, ref_points, img_metas)
+
+    # def _get_detections_impl(
+    #     self, 
+    #     bev_embed,
+    #     object_query_embeds=None,
+    #     ref_points=None,
+    #     img_metas=None,
+    # ):
+    #     """实际的前向传播逻辑"""
+        # start_event = torch.cuda.Event(enable_timing=True)
+        # end_event = torch.cuda.Event(enable_timing=True)
+        # start_event.record()  # 开始计时
+        
         assert bev_embed.shape[0] == self.bev_h * self.bev_w
         hs, init_reference, inter_references = self.transformer.get_states_and_refs(
             bev_embed,
@@ -232,6 +272,11 @@ class BEVFormerTrackHead(DETRHead):
             'last_ref_points': last_ref_points,
             'query_feats': hs,
         }
+        
+        # end_event.record()    # 结束计时
+        # torch.cuda.synchronize()
+        # elapsed_track = start_event.elapsed_time(end_event)  # 转换为毫秒
+        # print(f'1.3 get_detection 耗时{elapsed_track}ms' )
         return outs
         
     def _get_target_single(self,

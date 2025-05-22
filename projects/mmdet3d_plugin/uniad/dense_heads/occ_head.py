@@ -19,6 +19,9 @@ from .occ_head_plugin import MLP, BevFeatureSlicer, SimpleConv2d, CVT_Decoder, B
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
+# import torch
+# from torch.utils.benchmark import Timer
+
 @HEADS.register_module()
 class OccHead(BaseModule):
     def __init__(self, 
@@ -196,6 +199,19 @@ class OccHead(BaseModule):
         return attn_mask, upsampled_mask_pred, ins_embed
 
     def forward(self, x, ins_query):
+    #     # 创建 Timer 对象
+    #     timer = Timer(stmt="self._forward_function(x, ins_query)",
+    #                   globals={"self": self, "x": x, "ins_query": ins_query})
+        
+    #     # 执行计时
+    #     measurement = timer.blocked_autorange()
+    #     print(f"-----------------------------------------第二个模块OccHead的运行时间: {measurement.mean * 1e3:.3f} ms")  # 将时间转换为毫秒并打印
+
+    #     # 调用原始的 forward 函数逻辑
+    #     return self._forward_function(x, ins_query)
+
+    # def _forward_function(self, x, ins_query):
+    #      # 原始的 forward 逻辑
         base_state = rearrange(x, '(h w) b d -> b d h w', h=self.bev_size[0])
 
         base_state = self.bev_sampler(base_state)

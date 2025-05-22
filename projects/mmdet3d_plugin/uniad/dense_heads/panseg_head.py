@@ -19,7 +19,7 @@ from mmdet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
                         reduce_mean)
 from mmdet.models.utils import build_transformer
 from .seg_head_plugin import SegDETRHead, IOU
-
+# from torch.utils.benchmark import Timer
 @HEADS.register_module()
 class PansegformerHead(SegDETRHead):
     """
@@ -204,6 +204,17 @@ class PansegformerHead(SegDETRHead):
                 as_two_stage is True it would be returned, otherwise \
                 `None` would be returned.
         """
+    #            # 初始化 Timer
+    #     timer = Timer(stmt="self._forward_impl(bev_embed)", globals={"self": self, "bev_embed": bev_embed})
+    #     # 测量运行时间
+    #     timer_result = timer.blocked_autorange()
+    #     print(f"------------------------------------------第三个模块PansegformerHead的运行时间: {timer_result.mean * 1e3:.4f} ms")
+
+    #     # 调用实际的前向传播逻辑
+    #     return self._forward_impl(bev_embed)
+
+    # def _forward_impl(self, bev_embed):
+    #     # 原始的 forward 逻辑
         _, bs, _ = bev_embed.shape
 
         mlvl_feats = [torch.reshape(bev_embed, (bs, self.bev_h, self.bev_w ,-1)).permute(0, 3, 1, 2)]

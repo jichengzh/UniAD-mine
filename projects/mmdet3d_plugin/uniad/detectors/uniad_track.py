@@ -152,6 +152,10 @@ class UniADTrack(MVXTwoStageDetector):
 
     def extract_img_feat(self, img, len_queue=None):
         """Extract features of images."""
+        start_event1 = torch.cuda.Event(enable_timing=True)
+        end_event1 = torch.cuda.Event(enable_timing=True)
+        start_event1.record()  # 开始计时
+
         if img is None:
             return None
         assert img.dim() == 5
@@ -159,11 +163,28 @@ class UniADTrack(MVXTwoStageDetector):
         img = img.reshape(B * N, C, H, W)
         if self.use_grid_mask:
             img = self.grid_mask(img)
+
+        start_event2 = torch.cuda.Event(enable_timing=True)
+        end_event2 = torch.cuda.Event(enable_timing=True)
+        start_event2.record()  # 开始计时
         img_feats = self.img_backbone(img)
+        end_event2.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event2.elapsed_time(end_event2)  # 转换为毫秒
+        print((f'1.2.1. img_backbone 耗时 { elapsed_track} ms'))
+
+
         if isinstance(img_feats, dict):
             img_feats = list(img_feats.values())
         if self.with_img_neck:
+            start_event3 = torch.cuda.Event(enable_timing=True)
+            end_event3 = torch.cuda.Event(enable_timing=True)
+            start_event3.record()  # 开始计时
             img_feats = self.img_neck(img_feats)
+            end_event3.record()    # 结束计时
+            torch.cuda.synchronize()
+            elapsed_track = start_event3.elapsed_time(end_event3)  # 转换为毫秒
+            print((f'1.2.2. img_neck 耗时 { elapsed_track} ms'))
 
         img_feats_reshaped = []
         for img_feat in img_feats:
@@ -173,6 +194,11 @@ class UniADTrack(MVXTwoStageDetector):
             else:
                 img_feat_reshaped = img_feat.view(B, N, c, h, w)
             img_feats_reshaped.append(img_feat_reshaped)
+
+        end_event1.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event1.elapsed_time(end_event1)  # 转换为毫秒
+        print(f'1.2. extract_img_feat 耗时 {elapsed_track} ms' )
         return img_feats_reshaped
 
     def _generate_empty_tracks(self):
@@ -338,9 +364,8 @@ class UniADTrack(MVXTwoStageDetector):
         if prev_img is not None and prev_img_metas is not None:
             assert prev_bev is None
             prev_bev = self.get_history_bev(prev_img, prev_img_metas)
-
         img_feats = self.extract_img_feat(img=imgs)
-        if self.freeze_bev_encoder:
+        if self.freeze_bev_encoder:# 判断是否冻结bev编码器而使用no_grad上下文管理器
             with torch.no_grad():
                 bev_embed, bev_pos = self.pts_bbox_head.get_bev_features(
                     mlvl_feats=img_feats, img_metas=img_metas, prev_bev=prev_bev)
@@ -634,6 +659,14 @@ class UniADTrack(MVXTwoStageDetector):
         """
 
         """ velo update """
+        torch.cuda.reset_max_memory_allocated()
+        torch.cuda.reset_max_memory_cached()
+
+        
+        start_event4 = torch.cuda.Event(enable_timing=True)
+        end_event4 = torch.cuda.Event(enable_timing=True)
+        start_event4.record()  # 开始计时
+
         active_inst = track_instances[track_instances.obj_idxes >= 0]
         other_inst = track_instances[track_instances.obj_idxes < 0]
 
@@ -650,14 +683,40 @@ class UniADTrack(MVXTwoStageDetector):
 
         track_instances = Instances.cat([other_inst, active_inst])
 
+        end_event4.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event4.elapsed_time(end_event4)  # 转换为毫秒
+        print((f'get_bevs_before 耗时 { elapsed_track} ms'))
+
         # NOTE: You can replace BEVFormer with other BEV encoder and provide bev_embed here
+        # bev特征提取
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()  # 开始计时
         bev_embed, bev_pos = self.get_bevs(img, img_metas, prev_bev=prev_bev)
+        end_event.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event.elapsed_time(end_event)  # 转换为毫秒
+        print((f'1. get_bevs 耗时 { elapsed_track} ms'))
+
+        # 目标检测
+        start_event3 = torch.cuda.Event(enable_timing=True)
+        end_event3 = torch.cuda.Event(enable_timing=True)
+        start_event3.record()  # 开始计时
         det_output = self.pts_bbox_head.get_detections(
             bev_embed, 
             object_query_embeds=track_instances.query,
             ref_points=track_instances.ref_pts,
             img_metas=img_metas,
         )
+        end_event3.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event3.elapsed_time(end_event3)  # 转换为毫秒
+        print((f'2. get_detections 耗时 { elapsed_track} ms'))
+
+        start_event1 = torch.cuda.Event(enable_timing=True)
+        end_event1 = torch.cuda.Event(enable_timing=True)
+        start_event1.record()  # 开始计时
         output_classes = det_output["all_cls_scores"]
         output_coords = det_output["all_bbox_preds"]
         last_ref_pts = det_output["last_ref_points"]
@@ -703,6 +762,16 @@ class UniADTrack(MVXTwoStageDetector):
         out["track_instances_fordet"] = track_instances
         out["track_instances"] = out_track_instances
         out["track_obj_idxes"] = track_instances.obj_idxes
+        end_event1.record()    # 结束计时
+        torch.cuda.synchronize()
+        elapsed_track = start_event1.elapsed_time(end_event1)  # 转换为毫秒
+        print((f'get_detection_after 耗时 { elapsed_track} ms'))
+
+        max_memory_allocated = torch.cuda.max_memory_allocated() / (1024 ** 2)  # 转换为MB
+        max_memory_cached = torch.cuda.max_memory_cached() / (1024 ** 2)  # 转换为MB
+        print(f"Max Memory Allocated: {max_memory_allocated} MB")
+        print(f"Max Memory Cached: {max_memory_cached} MB")
+        print('-------------------------------------------------------------------------------')
         return out
 
     def simple_test_track(
@@ -745,6 +814,7 @@ class UniADTrack(MVXTwoStageDetector):
 
         """ predict and update """
         prev_bev = self.prev_bev
+        # 推理与更新跟踪实例
         frame_res = self._forward_single_frame_inference(
             img,
             img_metas,

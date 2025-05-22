@@ -1,0 +1,34 @@
+/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/launch.py:178: FutureWarning: The module torch.distributed.launch is deprecated
+and will be removed in future. Use torchrun.
+Note that --use_env is set by default in torchrun.
+If your script expects `--local_rank` argument to be set, please
+change it to read from `os.environ['LOCAL_RANK']` instead. See 
+https://pytorch.org/docs/stable/distributed.html#launch-utility for 
+further instructions
+
+  warnings.warn(
+Traceback (most recent call last):
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/run.py", line 564, in determine_local_world_size
+    return int(nproc_per_node)
+ValueError: invalid literal for int() with base 10: ''
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/conda/envs/uniad/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/conda/envs/uniad/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/launch.py", line 193, in <module>
+    main()
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/launch.py", line 189, in main
+    launch(args)
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/launch.py", line 174, in launch
+    run(args)
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/run.py", line 709, in run
+    config, cmd, cmd_args = config_from_args(args)
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/run.py", line 617, in config_from_args
+    nproc_per_node = determine_local_world_size(args.nproc_per_node)
+  File "/opt/conda/envs/uniad/lib/python3.8/site-packages/torch/distributed/run.py", line 582, in determine_local_world_size
+    raise ValueError(f"Unsupported nproc_per_node value: {nproc_per_node}")
+ValueError: Unsupported nproc_per_node value: 

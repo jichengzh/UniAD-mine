@@ -17,6 +17,10 @@ from projects.mmdet3d_plugin.models.utils.functional import (
 from .motion_head_plugin.motion_utils import nonlinear_smoother
 from .motion_head_plugin.base_motion_head import BaseMotionHead
 
+"""
+import torch
+from torch.utils.benchmark import Timer
+"""
 
 @HEADS.register_module()
 class MotionHead(BaseMotionHead):
@@ -234,6 +238,21 @@ class MotionHead(BaseMotionHead):
         - 'track_query': A tensor containing the input track queries.
         - 'track_query_pos': A tensor containing the positional embeddings of the track queries.
         """
+        """# 创建 Timer 对象
+        timer = Timer(stmt="self._forward_function(bev_embed, track_query, lane_query, lane_query_pos, track_bbox_results)",
+                      globals={"self": self, "bev_embed": bev_embed, "track_query": track_query,
+                              "lane_query": lane_query, "lane_query_pos": lane_query_pos,
+                              "track_bbox_results": track_bbox_results})
+        
+        # 执行计时
+        measurement = timer.blocked_autorange()
+        print(f"--------------------------------------------------------------第一个模块motionhead的forward的运行时间: {measurement.mean * 1e3:.3f} ms")  # 将时间转换为毫秒并打印
+
+        # 调用原始的 forward 函数逻辑
+        return self._forward_function(bev_embed, track_query, lane_query, lane_query_pos, track_bbox_results)
+
+    def _forward_function(self, bev_embed, track_query, lane_query, lane_query_pos, track_bbox_results):
+        # 将原始的 forward 函数逻辑移到这里"""
         
         dtype = track_query.dtype
         device = track_query.device
@@ -297,6 +316,8 @@ class MotionHead(BaseMotionHead):
 
         outputs_traj_scores = []
         outputs_trajs = []
+        # print("---------------------------------------------------------------------------------------------------------")
+        # print(self.motionformer)
 
         inter_states, inter_references = self.motionformer(
             track_query,  # B, A_track, D

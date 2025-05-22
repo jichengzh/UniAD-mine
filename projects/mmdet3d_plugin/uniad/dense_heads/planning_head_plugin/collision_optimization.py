@@ -50,7 +50,7 @@ class CollisionNonlinearOptimizer:
 
         # Set default solver options (quiet)
         self._optimizer.solver("ipopt", {"ipopt.print_level": 0, "print_time": 0, "ipopt.sb": "yes"})
-
+    # 参考轨迹预测
     def set_reference_trajectory(self, reference_trajectory: Sequence[Pose]) -> None:
         """
         Set the reference trajectory that the smoother is trying to loosely track.
@@ -66,7 +66,7 @@ class CollisionNonlinearOptimizer:
         :param options: Dictionary containing optimization criterias
         """
         self._optimizer.solver("ipopt", options)
-
+    # 优化求解
     def solve(self) -> OptiSol:
         """
         Solve the optimization problem. Assumes the reference trajectory was already set.
