@@ -55,7 +55,7 @@ class MemoryBank(nn.Module):
     def _forward_temporal_attn(self, track_instances):
         if len(track_instances) == 0:
             return track_instances
-
+        
         key_padding_mask = track_instances.mem_padding_mask  # [n_, memory_bank_len]
 
         valid_idxes = key_padding_mask[:, -1] == 0

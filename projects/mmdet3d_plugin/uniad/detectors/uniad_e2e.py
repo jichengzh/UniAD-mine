@@ -12,6 +12,12 @@ import os
 from ..dense_heads.seg_head_plugin import IOU
 from .uniad_track import UniADTrack
 from mmdet.models.builder import build_head
+import pynvml
+import time
+from projects.Energy_measure import GpuEnergyMeter
+
+# pynvml.nvmlInit()
+# device_handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # 假设使用 GPU 0
 
 @DETECTORS.register_module()
 class UniAD(UniADTrack):
@@ -46,6 +52,8 @@ class UniAD(UniADTrack):
         self.task_loss_weight = task_loss_weight
         assert set(task_loss_weight.keys()) == \
                {'track', 'occ', 'motion', 'map', 'planning'}
+        
+        self.energy_meter = GpuEnergyMeter(device_index=0, warmup_sec=0.2)
 
     @property
     def with_planning_head(self):
@@ -81,8 +89,23 @@ class UniAD(UniADTrack):
             return self.forward_train(**kwargs)
         else:
             return self.forward_test(**kwargs)
-        
+    
 
+        
+    # def measure_energy_consumption_e2e(self, func, *args, **kwargs):
+        
+    #     """测量某个模块的能耗"""
+    #     start_energy = pynvml.nvmlDeviceGetTotalEnergyConsumption(device_handle)
+    #     result = func(*args, **kwargs)
+    #     time.sleep(0.1)  # 增加延迟
+    #     torch.cuda.synchronize()
+    #     end_energy = pynvml.nvmlDeviceGetTotalEnergyConsumption(device_handle)
+    #     energy_consumed = (end_energy - start_energy)  
+    #         # 根据 func 的类型或名称进行标注
+    #     module_name = func.__qualname__ if hasattr(func, '__qualname__') else func.__name__
+    #     print(f"1. [Energy Consumption] Module: {module_name}, Energy consumed: {energy_consumed:.3f}")
+    #     return result
+    
     # Add the subtask loss to the whole model loss
     @auto_fp16(apply_to=('img', 'points'))
     def forward_train(self,
@@ -252,8 +275,7 @@ class UniAD(UniADTrack):
                      gt_occ_img_is_valid=None,
                      **kwargs
                     ):
-        """Test function
-        """
+        """Test function"""
         for var, name in [(img_metas, 'img_metas')]:
             if not isinstance(var, list):
                 raise TypeError('{} must be a list, but got {}'.format(
@@ -289,41 +311,54 @@ class UniAD(UniADTrack):
         timestamp = timestamp[0] if timestamp is not None else None
 
         result = [dict() for i in range(len(img_metas))]
-        result_track = self.simple_test_track(img, l2g_t, l2g_r_mat, img_metas, timestamp)
-
+        # result_track = self.simple_test_track(img, l2g_t, l2g_r_mat, img_metas, timestamp)
+        result_track = self.energy_meter.measure_energy_consumption_e2e(
+            self.simple_test_track, True,'simple_test_track', img, l2g_t, l2g_r_mat, img_metas, timestamp
+        )
         # Upsample bev for tiny model        
         result_track[0] = self.upsample_bev_if_tiny(result_track[0])
         
         bev_embed = result_track[0]["bev_embed"]
 
         if self.with_seg_head:
-            result_seg =  self.seg_head.forward_test(bev_embed, gt_lane_labels, gt_lane_masks, img_metas, rescale)
+            # print(f"Calling {self.seg_head.forward_test.__name__} with args: {bev_embed, gt_lane_labels, gt_lane_masks, img_metas, rescale}")
+            print(1)
+            result_seg = self.energy_meter.measure_energy_consumption_e2e(
+                self.seg_head.forward_test, True,'seg_head' ,bev_embed, gt_lane_labels, gt_lane_masks, img_metas, rescale,
+            )
 
         if self.with_motion_head:
-            result_motion, outs_motion = self.motion_head.forward_test(bev_embed, outs_track=result_track[0], outs_seg=result_seg[0])
+            result_motion, outs_motion = self.energy_meter.measure_energy_consumption_e2e(
+                self.motion_head.forward_test, True,'motion_head', bev_embed, outs_track=result_track[0], outs_seg=result_seg[0],
+            )
             outs_motion['bev_pos'] = result_track[0]['bev_pos']
 
         outs_occ = dict()
         if self.with_occ_head:
             occ_no_query = outs_motion['track_query'].shape[1] == 0
-            outs_occ = self.occ_head.forward_test(
+            outs_occ = self.energy_meter.measure_energy_consumption_e2e(
+                self.occ_head.forward_test,
+                True,
+                'occ_head',
                 bev_embed, 
                 outs_motion,
-                no_query = occ_no_query,
+                no_query=occ_no_query,
                 gt_segmentation=gt_segmentation,
                 gt_instance=gt_instance,
                 gt_img_is_valid=gt_occ_img_is_valid,
             )
             result[0]['occ'] = outs_occ
-        
+    
         if self.with_planning_head:
-            planning_gt=dict(
+            planning_gt = dict(
                 segmentation=gt_segmentation,
                 sdc_planning=sdc_planning,
                 sdc_planning_mask=sdc_planning_mask,
                 command=command
             )
-            result_planning = self.planning_head.forward_test(bev_embed, outs_motion, outs_occ, command)
+            result_planning = self.energy_meter.measure_energy_consumption_e2e(
+                self.planning_head.forward_test, True,'planning_head' , bev_embed, outs_motion, outs_occ, command
+            )
             result[0]['planning'] = dict(
                 planning_gt=planning_gt,
                 result_planning=result_planning,
