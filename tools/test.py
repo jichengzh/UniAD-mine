@@ -5,7 +5,9 @@ import sklearn
 import mmcv
 import os
 import warnings
-from mmcv import Config, DictAction
+# from mmcv import Config, DictAction
+from mmengine import Config
+from mmengine.config import DictAction
 from mmcv.cnn import fuse_conv_bn
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
