@@ -147,7 +147,121 @@ model = dict(
         ),
         loss_bbox=dict(type="L1Loss", loss_weight=0.25),
         loss_past_traj_weight=0.0,
-    ),  # loss cfg for tracking
+    ),  
+    transformer_track=dict(
+        type="PerceptionTransformer",
+        rotate_prev_bev=True,
+        use_shift=True,
+        use_can_bus=True,
+        embed_dims=_dim_,
+        encoder=dict(
+            type="BEVFormerEncoder",
+            num_layers=6,
+            pc_range=point_cloud_range,
+            num_points_in_pillar=4,
+            return_intermediate=False,
+            transformerlayers=dict(
+                type="BEVFormerLayer",
+                attn_cfgs=[
+                    dict(
+                        type="TemporalSelfAttention", embed_dims=_dim_, num_levels=1
+                    ),
+                    dict(
+                        type="SpatialCrossAttention",
+                        pc_range=point_cloud_range,
+                        deformable_attention=dict(
+                            type="MSDeformableAttention3D",
+                            embed_dims=_dim_,
+                            num_points=8,
+                            num_levels=_num_levels_,
+                        ),
+                        embed_dims=_dim_,
+                    ),
+                ],
+                feedforward_channels=_ffn_dim_,
+                ffn_dropout=0.1,
+                operation_order=(
+                    "self_attn",
+                    "norm",
+                    "cross_attn",
+                    "norm",
+                    "ffn",
+                    "norm",
+                ),
+            ),
+        ),
+        decoder=dict(
+            type="DetectionTransformerDecoder",
+            num_layers=6,
+            return_intermediate=True,
+            transformerlayers=dict(
+                type="DetrTransformerDecoderLayer",
+                attn_cfgs=[
+                    dict(
+                        type="MultiheadAttention",
+                        embed_dims=_dim_,
+                        num_heads=8,
+                        dropout=0.1,
+                    ),
+                    dict(
+                        type="CustomMSDeformableAttention",
+                        embed_dims=_dim_,
+                        num_levels=1,
+                    ),
+                ],
+                feedforward_channels=_ffn_dim_,
+                ffn_dropout=0.1,
+                operation_order=(
+                    "self_attn",
+                    "norm",
+                    "cross_attn",
+                    "norm",
+                    "ffn",
+                    "norm",
+                ),
+            ),
+        ),
+    ),# loss cfg for tracking
+    transformer_seg=dict(
+        type='SegDeformableTransformer',
+        encoder=dict(
+            type='DetrTransformerEncoder',
+            num_layers=6,
+            transformerlayers=dict(
+                type='BaseTransformerLayer',
+                attn_cfgs=dict(
+                    type='MultiScaleDeformableAttention',
+                    embed_dims=_dim_,
+                    num_levels=_num_levels_,
+                        ),
+                feedforward_channels=_feed_dim_,
+                ffn_dropout=0.1,
+                operation_order=('self_attn', 'norm', 'ffn', 'norm'))),
+        decoder=dict(
+            type='DeformableDetrTransformerDecoder',
+            num_layers=6,
+            return_intermediate=True,
+            transformerlayers=dict(
+                type='DetrTransformerDecoderLayer',
+                attn_cfgs=[
+                    dict(
+                        type='MultiheadAttention',
+                        embed_dims=_dim_,
+                        num_heads=8,
+                        dropout=0.1),
+                    dict(
+                        type='MultiScaleDeformableAttention',
+                        embed_dims=_dim_,
+                        num_levels=_num_levels_,
+                    )
+                ],
+                feedforward_channels=_feed_dim_,
+                ffn_dropout=0.1,
+                operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
+                                    'ffn', 'norm')
+            ),
+        ),
+    ),
     pts_bbox_head=dict(
         type="BEVFormerTrackHead",
         bev_h=bev_h_,
@@ -160,80 +274,6 @@ model = dict(
         as_two_stage=False,
         past_steps=past_steps,
         fut_steps=fut_steps,
-        transformer=dict(
-            type="PerceptionTransformer",
-            rotate_prev_bev=True,
-            use_shift=True,
-            use_can_bus=True,
-            embed_dims=_dim_,
-            encoder=dict(
-                type="BEVFormerEncoder",
-                num_layers=6,
-                pc_range=point_cloud_range,
-                num_points_in_pillar=4,
-                return_intermediate=False,
-                transformerlayers=dict(
-                    type="BEVFormerLayer",
-                    attn_cfgs=[
-                        dict(
-                            type="TemporalSelfAttention", embed_dims=_dim_, num_levels=1
-                        ),
-                        dict(
-                            type="SpatialCrossAttention",
-                            pc_range=point_cloud_range,
-                            deformable_attention=dict(
-                                type="MSDeformableAttention3D",
-                                embed_dims=_dim_,
-                                num_points=8,
-                                num_levels=_num_levels_,
-                            ),
-                            embed_dims=_dim_,
-                        ),
-                    ],
-                    feedforward_channels=_ffn_dim_,
-                    ffn_dropout=0.1,
-                    operation_order=(
-                        "self_attn",
-                        "norm",
-                        "cross_attn",
-                        "norm",
-                        "ffn",
-                        "norm",
-                    ),
-                ),
-            ),
-            decoder=dict(
-                type="DetectionTransformerDecoder",
-                num_layers=6,
-                return_intermediate=True,
-                transformerlayers=dict(
-                    type="DetrTransformerDecoderLayer",
-                    attn_cfgs=[
-                        dict(
-                            type="MultiheadAttention",
-                            embed_dims=_dim_,
-                            num_heads=8,
-                            dropout=0.1,
-                        ),
-                        dict(
-                            type="CustomMSDeformableAttention",
-                            embed_dims=_dim_,
-                            num_levels=1,
-                        ),
-                    ],
-                    feedforward_channels=_ffn_dim_,
-                    ffn_dropout=0.1,
-                    operation_order=(
-                        "self_attn",
-                        "norm",
-                        "cross_attn",
-                        "norm",
-                        "ffn",
-                        "norm",
-                    ),
-                ),
-            ),
-        ),
         bbox_coder=dict(
             type="NMSFreeCoder",
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
@@ -268,46 +308,6 @@ model = dict(
         sync_cls_avg_factor=True,
         as_two_stage=False,
         with_box_refine=True,
-        transformer=dict(
-            type='SegDeformableTransformer',
-            encoder=dict(
-                type='DetrTransformerEncoder',
-                num_layers=6,
-                transformerlayers=dict(
-                    type='BaseTransformerLayer',
-                    attn_cfgs=dict(
-                        type='MultiScaleDeformableAttention',
-                        embed_dims=_dim_,
-                        num_levels=_num_levels_,
-                         ),
-                    feedforward_channels=_feed_dim_,
-                    ffn_dropout=0.1,
-                    operation_order=('self_attn', 'norm', 'ffn', 'norm'))),
-            decoder=dict(
-                type='DeformableDetrTransformerDecoder',
-                num_layers=6,
-                return_intermediate=True,
-                transformerlayers=dict(
-                    type='DetrTransformerDecoderLayer',
-                    attn_cfgs=[
-                        dict(
-                            type='MultiheadAttention',
-                            embed_dims=_dim_,
-                            num_heads=8,
-                            dropout=0.1),
-                        dict(
-                            type='MultiScaleDeformableAttention',
-                            embed_dims=_dim_,
-                            num_levels=_num_levels_,
-                        )
-                    ],
-                    feedforward_channels=_feed_dim_,
-                    ffn_dropout=0.1,
-                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
-                                     'ffn', 'norm')
-                ),
-            ),
-        ),
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=_dim_half_,

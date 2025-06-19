@@ -7,13 +7,19 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from mmcv.cnn import xavier_init
-from mmcv.cnn.bricks.transformer import build_transformer_layer_sequence
-from mmcv.runner.base_module import BaseModule
+# from mmcv.cnn import xavier_init
+from mmengine.model import xavier_init
 
-from mmdet.models.utils.builder import TRANSFORMER
+from mmcv.cnn.bricks.transformer import build_transformer_layer_sequence
+# from mmcv.runner.base_module import BaseModule
+from mmengine.model import BaseModule
+
+# from mmdet.models.utils.builder import TRANSFORMER
+from mmengine.registry import build_from_cfg
+from mmdet.registry import MODELS as TRANSFORMER
+build_transformer = lambda cfg: build_from_cfg(cfg, TRANSFORMER)
 from torch.nn.init import normal_
-from mmcv.runner.base_module import BaseModule
+# from mmcv.runner.base_module import BaseModule
 from torchvision.transforms.functional import rotate
 from .temporal_self_attention import TemporalSelfAttention
 from .spatial_cross_attention import MSDeformableAttention3D

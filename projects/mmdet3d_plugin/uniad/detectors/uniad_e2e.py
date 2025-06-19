@@ -6,12 +6,20 @@
 
 import torch
 from mmcv.runner import auto_fp16
-from mmdet.models import DETECTORS
+# from mmdet.models import DETECTORS
+from mmdet.registry import MODELS as DETECTORS
+
+
 import copy
 import os
 from ..dense_heads.seg_head_plugin import IOU
 from .uniad_track import UniADTrack
-from mmdet.models.builder import build_head
+# from mmdet.models.builder import build_head
+
+from mmengine.registry import build_from_cfg
+from mmdet.registry import MODELS
+build_head = lambda cfg: build_from_cfg(cfg, MODELS)
+build_transformer = lambda cfg: build_from_cfg(cfg, MODELS)
 
 @DETECTORS.register_module()
 class UniAD(UniADTrack):
@@ -21,6 +29,7 @@ class UniAD(UniADTrack):
     def __init__(
         self,
         seg_head=None,
+        transformer_seg=None,
         motion_head=None,
         occ_head=None,
         planning_head=None,
@@ -35,6 +44,8 @@ class UniAD(UniADTrack):
     ):
         super(UniAD, self).__init__(**kwargs)
         if seg_head:
+            seg_head = dict(seg_head)
+            seg_head['transformer'] = build_transformer(transformer_seg)
             self.seg_head = build_head(seg_head)
         if occ_head:
             self.occ_head = build_head(occ_head)

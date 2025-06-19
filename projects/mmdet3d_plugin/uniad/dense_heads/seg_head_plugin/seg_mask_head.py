@@ -8,7 +8,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from functools import partial
-from mmdet.models.utils.builder import TRANSFORMER
+# from mmdet.models.utils.builder import TRANSFORMER
+
+from mmdet.registry import MODELS as TRANSFORMER
+
 import math
 from mmcv.runner import force_fp32
 

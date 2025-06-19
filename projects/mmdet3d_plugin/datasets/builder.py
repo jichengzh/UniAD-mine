@@ -6,12 +6,19 @@ import random
 from functools import partial
 
 import numpy as np
-from mmcv.parallel import collate
-from mmcv.runner import get_dist_info
-from mmcv.utils import Registry, build_from_cfg
+# from mmcv.parallel import collate
+from mmengine.dataset import default_collate as collate     #可以使用pseudo_collate pseudo_collate 其保持列表结构不做堆叠
+# from mmcv.runner import get_dist_info
+from mmengine.dist import get_dist_info
+# from mmcv.utils import Registry, build_from_cfg
+from mmengine.registry import Registry, build_from_cfg
+
 from torch.utils.data import DataLoader
 
-from mmdet.datasets.samplers import GroupSampler
+# from mmdet.datasets.samplers import GroupSampler
+from mmengine.dataset import DefaultSampler          # 基础采样
+from mmdet.datasets.samplers import AspectRatioBatchSampler  # 分组成批
+
 from projects.mmdet3d_plugin.datasets.samplers.group_sampler import DistributedGroupSampler
 from projects.mmdet3d_plugin.datasets.samplers.distributed_sampler import DistributedSampler
 from projects.mmdet3d_plugin.datasets.samplers.sampler import build_sampler
@@ -44,7 +51,7 @@ def build_dataloader(dataset,
         DataLoader: A PyTorch dataloader.
     """
     rank, world_size = get_dist_info()
-    if dist:
+    if dist:# 决定是否分布式训练,如果分布式训练的话每个 GPU（或进程）都需要拿到属于自己的数据子集，且要保证数据分布均匀。
         # DistributedGroupSampler will definitely shuffle the data to satisfy
         # that images on each GPU are in the same group
         if shuffle:
@@ -72,7 +79,10 @@ def build_dataloader(dataset,
     else:
         # assert False, 'not support in bevformer'
         print('WARNING!!!!, Only can be used for obtain inference speed!!!!')
-        sampler = GroupSampler(dataset, samples_per_gpu) if shuffle else None
+        # sampler = GroupSampler(dataset, samples_per_gpu) if shuffle else None
+        batch_sampler = DefaultSampler(dataset, shuffle=True)      # 可自动处理 DDP
+        sampler = AspectRatioBatchSampler(
+            sampler=batch_sampler, batch_size=8, drop_last=True)
         batch_size = num_gpus * samples_per_gpu
         num_workers = num_gpus * workers_per_gpu
 
@@ -103,10 +113,13 @@ def worker_init_fn(worker_id, num_workers, rank, seed):
 
 # Copyright (c) OpenMMLab. All rights reserved.
 import platform
-from mmcv.utils import Registry, build_from_cfg
+# from mmcv.utils import Registry, build_from_cfg
+from mmengine.registry import Registry, build_from_cfg
 
-from mmdet.datasets import DATASETS
-from mmdet.datasets.builder import _concat_dataset
+# from mmdet.datasets import DATASETS
+from mmengine.registry import DATASETS
+# from mmdet.datasets.builder import _concat_dataset
+from mmengine.dataset import ConcatDataset as _concat_dataset
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973

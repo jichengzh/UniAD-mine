@@ -9,16 +9,34 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import Linear, bias_init_with_prob
-from mmcv.utils import TORCH_VERSION, digit_version
+from mmcv.cnn import Linear
+# from mmcv.utils import TORCH_VERSION, digit_version
 
-from mmdet.core import (multi_apply, multi_apply, reduce_mean)
-from mmdet.models.utils.transformer import inverse_sigmoid
-from mmdet.models import HEADS
 from mmdet.models.dense_heads import DETRHead
-from mmdet3d.core.bbox.coders import build_bbox_coder
+
+from mmengine.model import bias_init_with_prob
+
+# from mmdet.core import (multi_apply, multi_apply, reduce_mean)
+# from mmdet.models.utils.transformer import inverse_sigmoid
+from mmdet.utils import reduce_mean
+from mmdet.models.utils import multi_apply
+from mmdet.models.layers import inverse_sigmoid
+
+# from mmdet.models import HEADS
+from mmdet.registry import MODELS as HEADS     # 注册表
+
+# from mmdet3d.core.bbox.coders import build_bbox_coder
+from mmdet.registry import TASK_UTILS
+from mmengine.registry import build_from_cfg
+build_bbox_coder = lambda cfg: build_from_cfg(cfg, TASK_UTILS) #
+
+# from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox
+from mmcv.runner import force_fp32
 from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox
-from mmcv.runner import force_fp32, auto_fp16
+# from mmcv.ops import force_fp32, auto_fp16
+from mmdet.registry import MODELS    # Transformer 所在注册表
+build_loss = lambda cfg: build_from_cfg(cfg, MODELS)
+build_transformer = lambda cfg: build_from_cfg(cfg, MODELS)
 
 
 @HEADS.register_module()
@@ -75,8 +93,10 @@ class BEVFormerTrackHead(DETRHead):
         self.num_cls_fcs = num_cls_fcs - 1
         self.past_steps = past_steps
         self.fut_steps = fut_steps
-        super(BEVFormerTrackHead, self).__init__(
-            *args, transformer=transformer, **kwargs)
+        # super(BEVFormerTrackHead, self).__init__(
+        #     *args, transformer=transformer, **kwargs)
+        super(BEVFormerTrackHead, self).__init__(*args, **kwargs)
+        self.transformer = transformer
         self.code_weights = nn.Parameter(torch.tensor(
             self.code_weights, requires_grad=False), requires_grad=False)
 

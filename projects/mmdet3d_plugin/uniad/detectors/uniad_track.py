@@ -7,19 +7,27 @@
 import torch
 import torch.nn as nn
 from mmcv.runner import auto_fp16
-from mmdet.models import DETECTORS
-from mmdet3d.core import bbox3d2result
-from mmdet3d.core.bbox.coders import build_bbox_coder
+# from mmdet.models import DETECTORS
+from mmdet.registry import MODELS as DETECTORS
+# from mmdet3d.core import bbox3d2result
+# from mmdet3d.core.bbox.coders import build_bbox_coder
+from mmdet3d.models.task_modules.builder import build_bbox_coder
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 import copy
 import math
 from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox
-from mmdet.models import build_loss
+# from mmdet.models import build_loss
+from mmengine.registry import build_from_cfg
+from mmdet.registry import MODELS 
+build_loss = lambda cfg: build_from_cfg(cfg, MODELS)
+
 from einops import rearrange
-from mmdet.models.utils.transformer import inverse_sigmoid
+# from mmdet.models.utils.transformer import inverse_sigmoid
+from mmdet.models import inverse_sigmoid
 from ..dense_heads.track_head_plugin import MemoryBank, QueryInteractionModule, Instances, RuntimeTrackerBase
 
+build_transformer = lambda cfg: build_from_cfg(cfg, MODELS)
 @DETECTORS.register_module()
 class UniADTrack(MVXTwoStageDetector):
     """UniAD tracking part
@@ -29,6 +37,7 @@ class UniADTrack(MVXTwoStageDetector):
         use_grid_mask=False,
         img_backbone=None,
         img_neck=None,
+        transformer_track=None,
         pts_bbox_head=None,
         train_cfg=None,
         test_cfg=None,
@@ -72,13 +81,22 @@ class UniADTrack(MVXTwoStageDetector):
         freeze_bev_encoder=False,
         queue_length=3,
     ):
+
+        # 提前构建transformer
+        transformer = None
+        if transformer_track is not None:
+            transformer = build_transformer(transformer_track)
+        # 2. 注入到pts_bbox_head
+        if pts_bbox_head is not None:
+            pts_bbox_head = dict(pts_bbox_head)  # 拷贝，避免污染原配置
+            pts_bbox_head['transformer'] = transformer        
         super(UniADTrack, self).__init__(
             img_backbone=img_backbone,
             img_neck=img_neck,
             pts_bbox_head=pts_bbox_head,
             train_cfg=train_cfg,
             test_cfg=test_cfg,
-            pretrained=pretrained,
+            # pretrained=pretrained,
         )
 
         self.grid_mask = GridMask(

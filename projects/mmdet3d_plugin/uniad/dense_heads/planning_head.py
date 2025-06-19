@@ -6,7 +6,10 @@
 
 import torch
 import torch.nn as nn
-from mmdet.models.builder import HEADS, build_loss
+# from mmdet.models.builder import HEADS, build_loss
+from mmengine.registry import build_from_cfg
+from mmdet.registry import MODELS as HEADS
+build_loss = lambda cfg: build_from_cfg(cfg, HEADS)
 from einops import rearrange
 from projects.mmdet3d_plugin.models.utils.functional import bivariate_gaussian_activation
 from .planning_head_plugin import CollisionNonlinearOptimizer

@@ -5,13 +5,23 @@ from mmcv.cnn import Conv2d, Linear, build_activation_layer
 from mmcv.cnn.bricks.transformer import FFN, build_positional_encoding
 from mmcv.runner import force_fp32
 
-from mmdet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
-                        build_assigner, build_sampler, multi_apply,
-                        reduce_mean)
-from mmdet.models.utils import build_transformer
+# from mmdet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
+#                         build_assigner, build_sampler, multi_apply,
+#                         reduce_mean)
+from mmdet.structures.bbox import bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh
+from mmdet.models import build_assigner, build_sampler
+from mmdet.utils import reduce_mean
+from mmdet.models.utils import multi_apply
+
+# from mmdet.models.utils import build_transformer
 
 from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
-from mmdet.models.builder import HEADS, build_loss
+# from mmdet.models.builder import HEADS, build_loss
+from mmdet.registry import MODELS as HEADS 
+from mmengine.registry import build_from_cfg          # 通用工厂
+from mmdet.registry import MODELS    # Transformer 所在注册表
+build_loss = lambda cfg: build_from_cfg(cfg, MODELS)
+build_transformer = lambda cfg: build_from_cfg(cfg, MODELS)
 
 
 @HEADS.register_module()
@@ -687,3 +697,4 @@ class SegDETRHead(
         det_bboxes = torch.cat((det_bboxes, scores.unsqueeze(1)), -1)
 
         return det_bboxes, det_labels
+# print(HEADS.register_module)

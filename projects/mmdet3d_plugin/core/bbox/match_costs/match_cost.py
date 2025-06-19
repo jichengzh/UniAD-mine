@@ -1,6 +1,9 @@
 import torch
-from mmdet.core.bbox.match_costs.builder import MATCH_COST
+# from mmdet.core.bbox.match_costs.builder import MATCH_COST
 import torch.nn.functional as F
+from mmdet.registry import TASK_UTILS
+
+MATCH_COST = TASK_UTILS
 
 
 @MATCH_COST.register_module()

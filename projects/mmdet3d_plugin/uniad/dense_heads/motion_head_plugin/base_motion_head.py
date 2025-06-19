@@ -8,7 +8,11 @@ import torch
 import copy
 import pickle
 import torch.nn as nn
-from mmdet.models import  build_loss
+# from mmdet.models import  build_loss
+from mmengine.registry import build_from_cfg          # 通用工厂
+from mmdet.registry import MODELS    # Transformer 所在注册表
+build_loss = lambda cfg: build_from_cfg(cfg, MODELS)
+
 from mmcv.cnn.bricks.transformer import build_transformer_layer_sequence
 
 class BaseMotionHead(nn.Module):

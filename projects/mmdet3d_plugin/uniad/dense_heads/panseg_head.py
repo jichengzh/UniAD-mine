@@ -9,17 +9,31 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import Linear, bias_init_with_prob, constant_init
+from mmcv.cnn import Linear
+from mmengine.model import bias_init_with_prob, constant_init
 from mmcv.runner import force_fp32, auto_fp16
-from mmdet.core import multi_apply
-from mmdet.models.utils.transformer import inverse_sigmoid
-from mmdet.models.builder import HEADS, build_loss
-from mmdet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
-                        build_assigner, build_sampler, multi_apply,
-                        reduce_mean)
-from mmdet.models.utils import build_transformer
+# from mmdet.core import multi_apply
+from mmdet.models.utils import multi_apply
+# from mmdet.models.utils.transformer import inverse_sigmoid
+from mmdet.models.layers import inverse_sigmoid
+from mmdet.registry import MODELS as HEADS 
+
+from mmdet.structures.bbox import bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh
+from mmdet.models import build_assigner, build_sampler
+from mmdet.utils import reduce_mean
+# from mmdet.models.utils import build_transformer
+# from mmdet.models.builder import build_loss
+from mmengine.registry import build_from_cfg          # 通用工厂
+from mmdet.registry import MODELS    # Transformer 所在注册表
+build_loss = lambda cfg: build_from_cfg(cfg, MODELS)
+build_transformer = lambda cfg: build_from_cfg(cfg, MODELS)
+
 from .seg_head_plugin import SegDETRHead, IOU
 
+# print(HEADS.register_module)
+# print(SegDETRHead)
+# print(force_fp32)
+# print(auto_fp16)
 @HEADS.register_module()
 class PansegformerHead(SegDETRHead):
     """

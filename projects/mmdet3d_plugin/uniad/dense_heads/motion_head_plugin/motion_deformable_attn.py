@@ -12,12 +12,17 @@ import torch.nn as nn
 
 from einops import rearrange, repeat
 from mmcv.ops.multi_scale_deform_attn import multi_scale_deformable_attn_pytorch
-from mmcv.cnn import xavier_init, constant_init
-from mmcv.cnn.bricks.registry import ATTENTION, TRANSFORMER_LAYER
+from mmengine.model import xavier_init, constant_init
+# from mmcv.cnn.bricks.registry import ATTENTION, TRANSFORMER_LAYER
+from mmdet.registry import MODELS as ATTENTION
+from mmdet.registry import MODELS as TRANSFORMER_LAYER
 from mmcv.cnn.bricks.transformer import build_attention, build_feedforward_network, build_norm_layer
 from mmcv.cnn.bricks.drop import build_dropout
-from mmcv.runner.base_module import BaseModule, ModuleList, Sequential
-from mmcv.utils import ConfigDict, deprecated_api_warning
+# from mmcv.runner.base_module import BaseModule, ModuleList, Sequential
+from mmengine.model import BaseModule, ModuleList, Sequential
+# from mmcv.utils import ConfigDict, deprecated_api_warning
+from mmengine.config import ConfigDict
+from mmengine.utils import deprecated_api_warning
 from projects.mmdet3d_plugin.uniad.modules.multi_scale_deformable_attn_function import MultiScaleDeformableAttnFunction_fp32
 
 

@@ -6,7 +6,8 @@
 
 import torch
 import copy
-from mmdet.models import HEADS
+# from mmdet.models import HEADS
+from mmdet.registry import MODELS as HEADS 
 from mmcv.runner import force_fp32, auto_fp16
 from projects.mmdet3d_plugin.models.utils.functional import (
     bivariate_gaussian_activation,

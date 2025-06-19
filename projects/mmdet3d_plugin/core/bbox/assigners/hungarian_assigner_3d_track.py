@@ -1,13 +1,18 @@
 import numpy as np
 import torch
 
-from mmdet.core.bbox.builder import BBOX_ASSIGNERS
-from mmdet.core.bbox.assigners import BaseAssigner
-from mmdet.core.bbox.match_costs import build_match_cost
+# from mmdet.core.bbox.builder import BBOX_ASSIGNERS
+# from mmdet.core.bbox.assigners import BaseAssigner
+# from mmdet.core.bbox.match_costs import build_match_cost
 try:
     from scipy.optimize import linear_sum_assignment
 except ImportError:
     linear_sum_assignment = None
+
+from mmdet.registry import TASK_UTILS
+from mmdet.models.task_modules.assigners.base_assigner import BaseAssigner
+BBOX_ASSIGNERS = TASK_UTILS
+build_match_cost = TASK_UTILS.build
 
 
 @BBOX_ASSIGNERS.register_module()

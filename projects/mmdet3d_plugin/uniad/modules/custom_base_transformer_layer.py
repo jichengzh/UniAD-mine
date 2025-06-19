@@ -9,11 +9,14 @@ import warnings
 
 import torch
 
-from mmcv import ConfigDict
+# from mmcv import ConfigDict
+from mmengine.config import ConfigDict
 from mmcv.cnn import build_norm_layer
-from mmcv.runner.base_module import BaseModule, ModuleList
+# from mmcv.runner.base_module import BaseModule, ModuleList
+from mmengine.model import BaseModule, ModuleList
 
-from mmcv.cnn.bricks.registry import TRANSFORMER_LAYER
+# from mmcv.cnn.bricks.registry import TRANSFORMER_LAYER
+from mmdet.registry import MODELS as TRANSFORMER_LAYER
 from mmcv.cnn.bricks.transformer import build_feedforward_network, build_attention
 
 

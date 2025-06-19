@@ -1,9 +1,13 @@
 import torch
 
-from mmdet.core.bbox import BaseBBoxCoder
-from mmdet.core.bbox.builder import BBOX_CODERS
+# from mmdet.core.bbox import BaseBBoxCoder
+# from mmdet.core.bbox.builder import BBOX_CODERS
+from mmdet.models.task_modules.coders.base_bbox_coder import BaseBBoxCoder
+from mmdet.registry import TASK_UTILS
+BBOX_CODERS = TASK_UTILS
 from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox, denormalize_bbox
-from mmdet3d.core import xywhr2xyxyr
+# from mmdet3d.core import xywhr2xyxyr
+from mmdet3d.structures.bbox_3d.utils import xywhr2xyxyr
 from mmcv.ops import nms_bev
 
 @BBOX_CODERS.register_module()

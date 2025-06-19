@@ -1,10 +1,20 @@
 import torch
 
-from mmdet.core.bbox.builder import BBOX_ASSIGNERS
-from mmdet.core.bbox.assigners import AssignResult
-from mmdet.core.bbox.assigners import BaseAssigner
-from mmdet.core.bbox.match_costs import build_match_cost
-from mmdet.models.utils.transformer import inverse_sigmoid
+
+# from mmdet.core.bbox.builder import BBOX_ASSIGNERS
+# from mmdet.core.bbox.assigners import AssignResult
+# from mmdet.core.bbox.assigners import BaseAssigner
+# from mmdet.core.bbox.match_costs import build_match_cost
+# from mmdet.models.utils.transformer import inverse_sigmoid
+
+from mmdet.registry import TASK_UTILS
+from mmdet.models.task_modules.assigners.assign_result import AssignResult
+from mmdet.models.task_modules.assigners.base_assigner import BaseAssigner
+# from mmdet.registry import MATCH_COST
+BBOX_ASSIGNERS = TASK_UTILS
+build_match_cost = TASK_UTILS.build
+# from mmdet.models.task_modules.assigners.match_cost import build_match_cost
+# from mmdet.utils.geometry import inverse_sigmoid
 from projects.mmdet3d_plugin.core.bbox.util import normalize_bbox
 
 try:

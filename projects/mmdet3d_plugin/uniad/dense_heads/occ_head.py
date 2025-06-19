@@ -7,10 +7,16 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmdet.models.builder import HEADS, build_loss
-from mmcv.runner import BaseModule
+# from mmdet.models.builder import HEADS, build_loss
+from mmdet.registry import MODELS as HEADS 
+from mmengine.registry import build_from_cfg          # 通用工厂
+from mmdet.registry import MODELS    # Transformer 所在注册表
+build_loss = lambda cfg: build_from_cfg(cfg, MODELS)
+
+from mmengine.model import BaseModule
 from einops import rearrange
-from mmdet.core import reduce_mean
+#from mmdet.core import reduce_mean
+from mmdet.utils import reduce_mean
 from mmcv.cnn.bricks.transformer import build_transformer_layer_sequence
 import copy
 from .occ_head_plugin import MLP, BevFeatureSlicer, SimpleConv2d, CVT_Decoder, Bottleneck, UpsamplingAdd, \

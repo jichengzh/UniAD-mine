@@ -1,19 +1,25 @@
-from mmdet.core import mask
+# from mmdet.core import mask
 import torch
-from mmdet.core.bbox.assigners.base_assigner import BaseAssigner
+# from mmdet.core.bbox.assigners.base_assigner import BaseAssigner
+# from mmdet.core.bbox.assigners.assign_result import AssignResult
+from mmdet.models.task_modules.assigners.assign_result import AssignResult
+from mmdet.models.task_modules.assigners.base_assigner import BaseAssigner
+# from mmdet.core.bbox.transforms import bbox_cxcywh_to_xyxy
+from mmdet.structures.bbox import bbox_cxcywh_to_xyxy
+from mmdet.models import build_match_cost
 
-from mmdet.core.bbox.assigners.assign_result import AssignResult
-from mmdet.core.bbox.transforms import bbox_cxcywh_to_xyxy
-from mmdet.core.bbox.match_costs import build_match_cost
-from mmdet.core.bbox.builder import BBOX_ASSIGNERS
 try:
     from scipy.optimize import linear_sum_assignment
 except ImportError:
     linear_sum_assignment = None
 
-from mmdet.core.bbox.samplers.base_sampler import BaseSampler
-from mmdet.core.bbox.builder import BBOX_SAMPLERS
-from mmdet.core import mask
+from mmdet.base_sampler import BaseSampler
+# from mmdet.core.bbox.builder import BBOX_ASSIGNERS
+# from mmdet.core.bbox.builder import BBOX_SAMPLERS
+from mmdet.registry import TASK_UTILS as BBOX_ASSIGNERS
+from mmdet.registry import TASK_UTILS as BBOX_SAMPLERS
+
+
 import torch
 
 from mmdet.utils import util_mixins

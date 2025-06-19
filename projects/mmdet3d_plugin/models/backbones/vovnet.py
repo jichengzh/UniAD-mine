@@ -1,7 +1,9 @@
 
 from collections import OrderedDict
-from mmcv.runner import BaseModule
-from mmdet.models.builder import BACKBONES
+# from mmcv.runner import BaseModule
+from mmengine.model import BaseModule
+# from mmdet.models.builder import BACKBONES
+from mmengine.registry import MODELS as BACKBONES
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -14,14 +14,20 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import xavier_init, constant_init
-from mmcv.cnn.bricks.registry import (ATTENTION,
-                                      TRANSFORMER_LAYER_SEQUENCE)
+# from mmcv.cnn import xavier_init, constant_init
+from mmengine.model import xavier_init, constant_init
+# from mmcv.cnn.bricks.registry import (ATTENTION,
+#                                       TRANSFORMER_LAYER_SEQUENCE)
+from mmdet.registry import MODELS as ATTENTION
+from mmdet.registry import MODELS as TRANSFORMER_LAYER_SEQUENCE
 from mmcv.cnn.bricks.transformer import TransformerLayerSequence
 import math
-from mmcv.runner.base_module import BaseModule, ModuleList, Sequential
-from mmcv.utils import (ConfigDict, build_from_cfg, deprecated_api_warning,
-                        to_2tuple)
+# from mmcv.runner.base_module import BaseModule, ModuleList, Sequential
+from mmengine.model import BaseModule, ModuleList, Sequential
+# from mmcv.utils import (ConfigDict, build_from_cfg, deprecated_api_warning,
+                        # to_2tuple)
+from mmengine.config import ConfigDict
+from mmengine.utils import deprecated_api_warning
 
 from mmcv.utils import ext_loader
 from .multi_scale_deformable_attn_function import MultiScaleDeformableAttnFunction_fp32, \

@@ -2,10 +2,15 @@ import numpy as np
 from nuscenes.prediction import (PredictHelper,
                                  convert_local_coords_to_global,
                                  convert_global_coords_to_local)
-from mmdet3d.core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
+# from mmdet3d.core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
+from mmdet3d.structures import LiDARInstance3DBoxes
 from nuscenes.eval.common.utils import quaternion_yaw, Quaternion
-from mmcv.parallel import DataContainer as DC
+# from mmcv.parallel import DataContainer as DC     
+from mmcv.data_container import DataContainer as DC
+# from mmdet.datasets.pipelines import to_tensor
 from mmdet.datasets.pipelines import to_tensor
+
+
 
 class NuScenesTraj(object):
     def __init__(self,
