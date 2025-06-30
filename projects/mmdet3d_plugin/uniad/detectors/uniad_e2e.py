@@ -300,12 +300,21 @@ class UniAD(UniADTrack):
             result_seg =  self.seg_head.forward_test(bev_embed, gt_lane_labels, gt_lane_masks, img_metas, rescale)
 
         if self.with_motion_head:
+
+            if not self.with_seg_head:
+                result_seg = None
+
             result_motion, outs_motion = self.motion_head.forward_test(bev_embed, outs_track=result_track[0], outs_seg=result_seg[0])
             outs_motion['bev_pos'] = result_track[0]['bev_pos']
 
         outs_occ = dict()
         if self.with_occ_head:
             occ_no_query = outs_motion['track_query'].shape[1] == 0
+
+            # 消融 motion
+            if not self.with_motion_head:
+                outs_motion = None
+
             outs_occ = self.occ_head.forward_test(
                 bev_embed, 
                 outs_motion,
@@ -323,6 +332,14 @@ class UniAD(UniADTrack):
                 sdc_planning_mask=sdc_planning_mask,
                 command=command
             )
+
+            # 消融motion occ
+            if not self.with_motion_head:
+                outs_motion = None
+            if not self.with_occ_head:
+                outs_occ = None
+            
+
             result_planning = self.planning_head.forward_test(bev_embed, outs_motion, outs_occ, command)
             result[0]['planning'] = dict(
                 planning_gt=planning_gt,

@@ -59,7 +59,11 @@ class PlanningHeadSingleMode(nn.Module):
         self.planning_eval = planning_eval
         
         #### planning head
-        fuser_dim = 3
+        # fuser_dim = 3
+        # 消融motion map occ
+        fuser_dim = 1
+        # 消融motion/occ/map+motion/map+occ/occ+motion
+        # fuser_dim = 2
         attn_module_layer = nn.TransformerDecoderLayer(embed_dims, 8, dim_feedforward=embed_dims*2, dropout=0.1, batch_first=False)
         self.attn_module = nn.TransformerDecoder(attn_module_layer, 3)
         
@@ -127,11 +131,16 @@ class PlanningHeadSingleMode(nn.Module):
         ret_dict = dict(losses=losses, outs_motion=outs_planning)
         return ret_dict
 
-    def forward_test(self, bev_embed, outs_motion={}, outs_occflow={}, command=None):
-        sdc_traj_query = outs_motion['sdc_traj_query']
-        sdc_track_query = outs_motion['sdc_track_query']
-        bev_pos = outs_motion['bev_pos']
-        occ_mask = outs_occflow['seg_out']
+    # def forward_test(self, bev_embed, outs_motion={}, outs_occflow={}, command=None):
+    #     sdc_traj_query = outs_motion['sdc_traj_query']
+    #     sdc_track_query = outs_motion['sdc_track_query']
+    #     bev_pos = outs_motion['bev_pos']
+    #     occ_mask = outs_occflow['seg_out']
+    def forward_test(self, bev_embed, outs_motion=None, outs_occflow=None, command=None):
+        sdc_traj_query = outs_motion.get('sdc_traj_query', None)
+        sdc_track_query = outs_motion.get('sdc_track_query', None)
+        bev_pos = outs_motion.get('bev_pos', None)
+        occ_mask = outs_occflow.get('seg_out', None)
         
         outs_planning = self(bev_embed, occ_mask, bev_pos, sdc_traj_query, sdc_track_query, command)
         return outs_planning
@@ -157,21 +166,46 @@ class PlanningHeadSingleMode(nn.Module):
         Returns:
             dict: A dictionary containing SDC trajectory and all SDC trajectories.
         """
-        sdc_track_query = sdc_track_query.detach()
-        sdc_traj_query = sdc_traj_query[-1]
-        P = sdc_traj_query.shape[1]
-        sdc_track_query = sdc_track_query[:, None].expand(-1,P,-1)
+        # sdc_track_query = sdc_track_query.detach()
+        # sdc_traj_query = sdc_traj_query[-1]
+        # P = sdc_traj_query.shape[1]
+        # sdc_track_query = sdc_track_query[:, None].expand(-1,P,-1)
+
+        # 处理 None 情况
+        if sdc_track_query is not None:
+            sdc_track_query = sdc_track_query.detach()
+        if sdc_traj_query is not None:
+            sdc_traj_query = sdc_traj_query[-1]
+            P = sdc_traj_query.shape[1]
+        else:
+            P = 6  # 默认值
+
+        if sdc_track_query is not None:
+            sdc_track_query = sdc_track_query[:, None].expand(-1, P, -1)
         
         
         navi_embed = self.navi_embed.weight[command]
         navi_embed = navi_embed[None].expand(-1,P,-1)
-        plan_query = torch.cat([sdc_traj_query, sdc_track_query, navi_embed], dim=-1)
+        if sdc_traj_query is None and sdc_track_query is None:
+            plan_query = navi_embed
+        elif sdc_traj_query is None:
+            plan_query = torch.cat([sdc_track_query, navi_embed], dim=-1)
+        elif sdc_track_query is None:
+            plan_query = torch.cat([sdc_traj_query, navi_embed], dim=-1)
+        else:
+            plan_query = torch.cat([sdc_traj_query, sdc_track_query, navi_embed], dim=-1)
 
         plan_query = self.mlp_fuser(plan_query).max(1, keepdim=True)[0]   # expand, then fuse  # [1, 6, 768] -> [1, 1, 256]
         plan_query = rearrange(plan_query, 'b p c -> p b c')
         
-        bev_pos = rearrange(bev_pos, 'b c h w -> (h w) b c')
-        bev_feat = bev_embed +  bev_pos
+        # bev_pos = rearrange(bev_pos, 'b c h w -> (h w) b c')
+        # bev_feat = bev_embed +  bev_pos
+
+        if bev_pos is not None:
+            bev_pos = rearrange(bev_pos, 'b c h w -> (h w) b c')
+            bev_feat = bev_embed + bev_pos
+        else:
+            bev_feat = bev_embed
         
         ##### Plugin adapter #####
         if self.with_adapter:
@@ -192,8 +226,10 @@ class PlanningHeadSingleMode(nn.Module):
         sdc_traj_all[0] = bivariate_gaussian_activation(sdc_traj_all[0])
         if self.use_col_optim and not self.training:
             # post process, only used when testing
-            assert occ_mask is not None
-            sdc_traj_all = self.collision_optimization(sdc_traj_all, occ_mask)
+            # assert occ_mask is not None
+            # sdc_traj_all = self.collision_optimization(sdc_traj_all, occ_mask)
+            if occ_mask is not None:
+                sdc_traj_all = self.collision_optimization(sdc_traj_all, occ_mask)
         
         return dict(
             sdc_traj=sdc_traj_all,
