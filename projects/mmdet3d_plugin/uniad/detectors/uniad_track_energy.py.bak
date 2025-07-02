@@ -19,6 +19,11 @@ from mmdet.models import build_loss
 from einops import rearrange
 from mmdet.models.utils.transformer import inverse_sigmoid
 from ..dense_heads.track_head_plugin import MemoryBank, QueryInteractionModule, Instances, RuntimeTrackerBase
+import pynvml
+import time
+from projects.Energy_measure import GpuEnergyMeter
+# pynvml.nvmlInit()
+# device_handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # 假设使用 GPU 0
 
 @DETECTORS.register_module()
 class UniADTrack(MVXTwoStageDetector):
@@ -150,6 +155,21 @@ class UniADTrack(MVXTwoStageDetector):
         self.bev_h, self.bev_w = self.pts_bbox_head.bev_h, self.pts_bbox_head.bev_w
         self.freeze_bev_encoder = freeze_bev_encoder
 
+        self.energy_meter = GpuEnergyMeter(device_index=0, warmup_sec=0.2)
+
+    # def measure_energy_consumption_track(self, func, *args, **kwargs):
+    #     """测量某个模块的能耗"""
+    #     start_energy = pynvml.nvmlDeviceGetTotalEnergyConsumption(device_handle)
+    #     result = func(*args, **kwargs)
+    #     time.sleep(0.1)  # 增加延迟
+    #     end_energy = pynvml.nvmlDeviceGetTotalEnergyConsumption(device_handle)
+    #     energy_consumed = (end_energy - start_energy)  # 转换为焦耳
+    #         # 根据 func 的类型或名称进行标注
+    #         # 根据 func 的类型或名称进行标注
+    #     # module_name = str(func)
+    #     print(f"    2.[Energy Consumption] Module: Energy consumed: {energy_consumed:.3f}")
+    #     return result
+    
     def extract_img_feat(self, img, len_queue=None):
         """Extract features of images."""
         if img is None:
@@ -158,21 +178,22 @@ class UniADTrack(MVXTwoStageDetector):
         B, N, C, H, W = img.size()
         img = img.reshape(B * N, C, H, W)
         if self.use_grid_mask:
-            img = self.grid_mask(img)
-        # print(self.img_backbone)
-        # print(self.img_backbone.depth)
-        # print(self.img_backbone.stage_blocks)
-        img_feats = self.img_backbone(img)
+            # print("Measuring energy consumption for GridMask...")True
+            img = self.energy_meter.measure_energy_consumption_track(self.grid_mask, False, 'GridMask', img)
+        # print("Measuring energy consumption for img_backbone...")
+        img_feats = self.energy_meter.measure_energy_consumption_track(self.img_backbone, False, 'img_backbone', img)
         if isinstance(img_feats, dict):
             img_feats = list(img_feats.values())
         if self.with_img_neck:
-            img_feats = self.img_neck(img_feats)
+            # print("Measuring energy consumption for img_neck...")
+            img_feats = self.energy_meter.measure_energy_consumption_track(self.img_neck, False, 'img_neck', img_feats)
 
         img_feats_reshaped = []
+        # 维度重塑
         for img_feat in img_feats:
             _, c, h, w = img_feat.size()
             if len_queue is not None:
-                img_feat_reshaped = img_feat.view(B//len_queue, len_queue, N, c, h, w)
+                img_feat_reshaped = img_feat.view(B // len_queue, len_queue, N, c, h, w)
             else:
                 img_feat_reshaped = img_feat.view(B, N, c, h, w)
             img_feats_reshaped.append(img_feat_reshaped)
@@ -329,10 +350,10 @@ class UniADTrack(MVXTwoStageDetector):
             for i in range(len_queue):
                 img_metas = [each[i] for each in img_metas_list]
                 img_feats = [each_scale[:, i] for each_scale in img_feats_list]
-                prev_bev, _ = self.pts_bbox_head.get_bev_features(
-                    mlvl_feats=img_feats, 
-                    img_metas=img_metas, 
-                    prev_bev=prev_bev)
+                prev_bev, _ = self.energy_meter.measure_energy_consumption_track(
+                    self.pts_bbox_head.get_bev_features, False, 'pts_bbox_head.get_bev_features', 
+                    mlvl_feats=img_feats, img_metas=img_metas, prev_bev=prev_bev
+                )
         self.train()
         return prev_bev
 
@@ -340,20 +361,28 @@ class UniADTrack(MVXTwoStageDetector):
     def get_bevs(self, imgs, img_metas, prev_img=None, prev_img_metas=None, prev_bev=None):
         if prev_img is not None and prev_img_metas is not None:
             assert prev_bev is None
-            prev_bev = self.get_history_bev(prev_img, prev_img_metas)
+            # print("Measuring energy consumption for get_history_bev...")
+            prev_bev = self.energy_meter.measure_energy_consumption_track(self.get_history_bev, False, 'get_history_bev', prev_img, prev_img_metas)
 
-        img_feats = self.extract_img_feat(img=imgs)
+        # print("Measuring energy consumption for extract_img_feat...")
+        img_feats = self.energy_meter.measure_energy_consumption_track(self.extract_img_feat, False, 'extract_img_feat', img=imgs)
         if self.freeze_bev_encoder:
             with torch.no_grad():
-                bev_embed, bev_pos = self.pts_bbox_head.get_bev_features(
-                    mlvl_feats=img_feats, img_metas=img_metas, prev_bev=prev_bev)
+                # print("Measuring energy consumption for pts_bbox_head.get_bev_features (frozen)...")
+                bev_embed, bev_pos = self.energy_meter.measure_energy_consumption_track(
+                    self.pts_bbox_head.get_bev_features, False, 'get_bev_features (frozen)', 
+                    mlvl_feats=img_feats, img_metas=img_metas, prev_bev=prev_bev
+                )
         else:
-            bev_embed, bev_pos = self.pts_bbox_head.get_bev_features(
-                    mlvl_feats=img_feats, img_metas=img_metas, prev_bev=prev_bev)
-        
+            # print("Measuring energy consumption for pts_bbox_head.get_bev_features...")
+            bev_embed, bev_pos = self.energy_meter.measure_energy_consumption_track(
+                self.pts_bbox_head.get_bev_features, False, 'get_bev_features', 
+                mlvl_feats=img_feats, img_metas=img_metas, prev_bev=prev_bev
+            )
+
         if bev_embed.shape[1] == self.bev_h * self.bev_w:
             bev_embed = bev_embed.permute(1, 0, 2)
-        
+
         assert bev_embed.shape[0] == self.bev_h * self.bev_w
         return bev_embed, bev_pos
 
@@ -375,27 +404,21 @@ class UniADTrack(MVXTwoStageDetector):
         all_instances_pred_logits=None,
         all_instances_pred_boxes=None,
     ):
-        """
-        Perform forward only on one frame. Called in  forward_train
-        Warnning: Only Support BS=1
-        Args:
-            img: shape [B, num_cam, 3, H, W]
-            if l2g_r2 is None or l2g_t2 is None:
-                it means this frame is the end of the training clip,
-                so no need to call velocity update
-        """
-        # NOTE: You can replace BEVFormer with other BEV encoder and provide bev_embed here
-        bev_embed, bev_pos = self.get_bevs(
-            img, img_metas,
-            prev_img=prev_img, prev_img_metas=prev_img_metas,
+        # print("Measuring energy consumption for get_bevs...")
+        bev_embed, bev_pos = self.energy_meter.measure_energy_consumption_track(
+            self.get_bevs, False, 'get_bevs', img, img_metas, prev_img=prev_img, prev_img_metas=prev_img_metas
         )
-
-        det_output = self.pts_bbox_head.get_detections(
-            bev_embed,
-            object_query_embeds=track_instances.query,
-            ref_points=track_instances.ref_pts,
-            img_metas=img_metas,
+        # print("Measuring energy consumption for pts_bbox_head.get_detections...")
+        det_output = self.energy_meter.measure_energy_consumption_track(
+            self.pts_bbox_head.get_detections, False, 'pts_bbox_head.get_detections', 
+            bev_embed, object_query_embeds=track_instances.query, ref_points=track_instances.ref_pts, img_metas=img_metas
         )
+        # det_output = self.pts_bbox_head.get_detections(
+        #     bev_embed,
+        #     object_query_embeds=track_instances.query,
+        #     ref_points=track_instances.ref_pts,
+        #     img_metas=img_metas,
+        # )
 
         output_classes = det_output["all_cls_scores"]
         output_coords = det_output["all_bbox_preds"]
@@ -426,7 +449,11 @@ class UniADTrack(MVXTwoStageDetector):
         velo = output_coords[-1, 0, :, -2:]  # [num_query, 3]
         if l2g_r2 is not None:
             # Update ref_pts for next frame considering each agent's velocity
-            ref_pts = self.velo_update(
+            # print("Measuring energy consumption for velo_update...")
+            ref_pts = self.energy_meter.measure_energy_consumption_track(
+                self.velo_update,
+                False, 
+                'velo_update',
                 last_ref_pts[0],
                 velo,
                 l2g_r1,
@@ -435,6 +462,15 @@ class UniADTrack(MVXTwoStageDetector):
                 l2g_t2,
                 time_delta=time_delta,
             )
+            # ref_pts = self.velo_update(
+            #     last_ref_pts[0],
+            #     velo,
+            #     l2g_r1,
+            #     l2g_t1,
+            #     l2g_r2,
+            #     l2g_t2,
+            #     time_delta=time_delta,
+            # )
         else:
             ref_pts = last_ref_pts[0]
 
@@ -453,9 +489,13 @@ class UniADTrack(MVXTwoStageDetector):
             track_instances.pred_past_trajs = output_past_trajs[i, 0]  # [300,past_steps, 2]
 
             out["track_instances"] = track_instances
-            track_instances, matched_indices = self.criterion.match_for_single_frame(
-                out, i, if_step=(i == (nb_dec - 1))
+            # print("Measuring energy consumption for criterion.match_for_single_frame...")
+            track_instances, matched_indices = self.energy_meter.measure_energy_consumption_track(
+                self.criterion.match_for_single_frame, False, 'match_for_single_frame', out, i, if_step=(i == (nb_dec - 1))
             )
+            # track_instances, matched_indices = self.criterion.match_for_single_frame(
+            #     out, i, if_step=(i == (nb_dec - 1))
+            # )
             all_query_embeddings.append(query_feats[i][0])
             all_matched_indices.append(matched_indices)
             all_instances_pred_logits.append(output_classes[i, 0])
@@ -485,7 +525,7 @@ class UniADTrack(MVXTwoStageDetector):
     
     def select_sdc_track_query(self, sdc_instance, img_metas):
         out = dict()
-        result_dict = self._track_instances2results(sdc_instance, img_metas, with_mask=False)
+        result_dict = self._track_instances2results(sdc_instance, img_metas, with_mask=True)
         out["sdc_boxes_3d"] = result_dict['boxes_3d']
         out["sdc_scores_3d"] = result_dict['scores_3d']
         out["sdc_track_scores"] = result_dict['track_scores']
@@ -643,20 +683,21 @@ class UniADTrack(MVXTwoStageDetector):
         if l2g_r2 is not None and len(active_inst) > 0 and l2g_r1 is not None:
             ref_pts = active_inst.ref_pts
             velo = active_inst.pred_boxes[:, -2:]
-            ref_pts = self.velo_update(
-                ref_pts, velo, l2g_r1, l2g_t1, l2g_r2, l2g_t2, time_delta=time_delta
+            # print("Measuring energy consumption for velo_update...")
+            ref_pts = self.energy_meter.measure_energy_consumption_track(
+                self.velo_update,False,'velo_update', ref_pts, velo, l2g_r1, l2g_t1, l2g_r2, l2g_t2, time_delta=time_delta
             )
-            ref_pts = ref_pts.squeeze(0)
-            dim = active_inst.query.shape[-1]
-            active_inst.ref_pts = self.reference_points(active_inst.query[..., :dim//2])
-            active_inst.ref_pts[...,:2] = ref_pts[...,:2]
-
-        track_instances = Instances.cat([other_inst, active_inst])
-
-        # NOTE: You can replace BEVFormer with other BEV encoder and provide bev_embed here
-        bev_embed, bev_pos = self.get_bevs(img, img_metas, prev_bev=prev_bev)
-        det_output = self.pts_bbox_head.get_detections(
-            bev_embed, 
+        # print("Measuring energy consumption for get_bevs...")
+        # bev_embed, bev_pos = self.get_bevs(img, img_metas, prev_bev=prev_bev)
+        bev_embed, bev_pos = self.energy_meter.measure_energy_consumption_track(
+            self.get_bevs,False,'get_bevs', img, img_metas, prev_bev=prev_bev
+            )
+        # print("Measuring energy consumption for pts_bbox_head.get_detections...")
+        det_output = self.energy_meter.measure_energy_consumption_track(
+            self.pts_bbox_head.get_detections,
+            False, 
+            'pts_bbox_head.get_detections',
+            bev_embed,
             object_query_embeds=track_instances.query,
             ref_points=track_instances.ref_pts,
             img_metas=img_metas,
@@ -691,18 +732,45 @@ class UniADTrack(MVXTwoStageDetector):
         self.track_base.update(track_instances, None)
        
         active_index = (track_instances.obj_idxes>=0) & (track_instances.scores >= self.track_base.filter_score_thresh)    # filter out sleep objects
-        out.update(self.select_active_track_query(track_instances, active_index, img_metas))
+        # print("Measuring energy consumption for select_active_track_query...")
+        out.update(self.energy_meter.measure_energy_consumption_track(
+            self.select_active_track_query,
+            False,
+            'select_active_track_query',
+            track_instances, active_index, img_metas
+        ))
+        # out.update(self.select_active_track_query(track_instances, active_index, img_metas))
         out.update(self.select_sdc_track_query(track_instances[track_instances.obj_idxes==-2], img_metas))
 
         """ update with memory_bank """
         if self.memory_bank is not None:
-            track_instances = self.memory_bank(track_instances)
+            # print("Measuring energy consumption for memory_bank...")
+            track_instances = self.energy_meter.measure_energy_consumption_track(
+                self.memory_bank, 
+                False,
+                'memory_bank',
+                track_instances
+            )
+            # track_instances = self.memory_bank(track_instances)
 
         """  Update track instances using matcher """
         tmp = {}
-        tmp["init_track_instances"] = self._generate_empty_tracks()
+        # print("Measuring energy consumption for _generate_empty_tracks...")
+        tmp["init_track_instances"] = self.energy_meter.measure_energy_consumption_track(
+            self._generate_empty_tracks, 
+            False,
+            'generate_empty_tracks'
+        )
+        # tmp["init_track_instances"] = self._generate_empty_tracks()
         tmp["track_instances"] = track_instances
-        out_track_instances = self.query_interact(tmp)
+        # print("Measuring energy consumption for query_interact...")
+        out_track_instances = self.energy_meter.measure_energy_consumption_track(
+            self.query_interact,
+            False,
+            'query_interact',
+            tmp
+        )
+        # out_track_instances = self.query_interact(tmp)
         out["track_instances_fordet"] = track_instances
         out["track_instances"] = out_track_instances
         out["track_obj_idxes"] = track_instances.obj_idxes
@@ -716,6 +784,7 @@ class UniADTrack(MVXTwoStageDetector):
         img_metas=None,
         timestamp=None,
     ):
+        print("simple_test_track is called")
         """only support bs=1 and sequential input"""
 
         bs = img.size(0)
@@ -748,17 +817,32 @@ class UniADTrack(MVXTwoStageDetector):
 
         """ predict and update """
         prev_bev = self.prev_bev
-        frame_res = self._forward_single_frame_inference(
+        # print("Measuring energy consumption for _forward_single_frame_inference...")
+        frame_res = self.energy_meter.measure_energy_consumption_track(
+            self._forward_single_frame_inference,
+            False,
+            '_forward_single_frame_inference',
             img,
             img_metas,
             track_instances,
-            prev_bev,
-            l2g_r1,
-            l2g_t1,
-            l2g_r2,
-            l2g_t2,
-            time_delta,
+            prev_bev=prev_bev,
+            l2g_r1=l2g_r1,
+            l2g_t1=l2g_t1,
+            l2g_r2=l2g_r2,
+            l2g_t2=l2g_t2,
+            time_delta=time_delta
         )
+        # frame_res = self._forward_single_frame_inference(
+        #     img,
+        #     img_metas,
+        #     track_instances,
+        #     prev_bev,
+        #     l2g_r1,
+        #     l2g_t1,
+        #     l2g_r2,
+        #     l2g_t2,
+        #     time_delta,
+        # )
 
         self.prev_bev = frame_res["bev_embed"]
         track_instances = frame_res["track_instances"]
@@ -783,6 +867,7 @@ class UniADTrack(MVXTwoStageDetector):
             obj_idxes=track_instances.obj_idxes,
         )
         # bboxes_dict = self.bbox_coder.decode(bbox_dict, with_mask=with_mask)[0]
+        # 把归一化的bbox解码成实际的3D bbox
         bboxes_dict = self.bbox_coder.decode(bbox_dict, with_mask=with_mask, img_metas=img_metas)[0]
         bboxes = bboxes_dict["bboxes"]
         # bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
@@ -830,6 +915,7 @@ class UniADTrack(MVXTwoStageDetector):
             track_scores=instances.scores,
             obj_idxes=instances.obj_idxes,
         )
+        # 尺寸比例映射
         bboxes_dict = self.bbox_coder.decode(bbox_dict, img_metas=img_metas)[0]
         bboxes = bboxes_dict["bboxes"]
         bboxes = img_metas[0]["box_type_3d"](bboxes, 9)
@@ -850,3 +936,4 @@ class UniADTrack(MVXTwoStageDetector):
             result_dict = None
 
         return [result_dict]
+

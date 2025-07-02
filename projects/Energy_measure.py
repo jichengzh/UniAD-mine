@@ -28,7 +28,7 @@ class GpuEnergyMeter:
         # 2) 读起始能量计数 & 起始时间
         e0_mj = pynvml.nvmlDeviceGetTotalEnergyConsumption(self.handle)
         t0 = time.time()
-        # time.sleep(0.1)  # 确保 GPU 空闲
+        time.sleep(0.1)  # 确保 GPU 空闲
         # 3) 执行目标函数
         if measure_flops:
             # print(1)

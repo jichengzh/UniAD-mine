@@ -374,9 +374,19 @@ class MotionHead(BaseMotionHead):
             grouped_label = self.cls2group[label]
             grouped_mode_query_pos = []
             for j in range(agent_num):
-                grouped_mode_query_pos.append(
-                    mode_query_pos[i, j, grouped_label[j]])
+                grouped_mode_query_pos.append(mode_query_pos[i, j, grouped_label[j]])
+                # if mode_query_pos.shape[1] > 0:  # Check if there's any valid agent_num
+                #     grouped_mode_query_pos.append(mode_query_pos[i, j, grouped_label[j]])
+                # else:
+                #     # If agent_num is 0, fill with zeros (or handle as appropriate)
+                #     grouped_mode_query_pos.append(torch.zeros_like(mode_query_pos[i, 0]))  # zero tensor as a fallback
             batched_mode_query_pos.append(torch.stack(grouped_mode_query_pos))
+                    # 检查 `grouped_mode_query_pos` 是否为空，避免调用 `torch.stack()` 时发生错误
+            # if len(grouped_mode_query_pos) > 0:
+            #     batched_mode_query_pos.append(torch.stack(grouped_mode_query_pos))
+            # else:
+            #     # 如果没有有效的元素，添加一个占位符
+            #     batched_mode_query_pos.append(torch.zeros_like(mode_query_pos[i, 0]))
         return torch.stack(batched_mode_query_pos)
 
     @force_fp32(apply_to=('preds_dicts_motion'))

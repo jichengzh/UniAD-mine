@@ -3,14 +3,16 @@ import os
 import argparse
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '/home/jichengzhi/mmdetection3d/VAD')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '/home/jichengzhi/mmdetection3d/UniAD')))
 import torch
 from mmcv import Config, DictAction
 
 from mmdet3d.models import build_model
 from mmdet3d.datasets import build_dataset
 from projects.mmdet3d_plugin.datasets.builder import build_dataloader
-from mmcv.parallel import MMDataParallel
+from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
+from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
+                         wrap_fp16_model)
 
 # try:
 #     from mmcv.cnn import get_model_complexity_info
@@ -658,6 +660,12 @@ def parse_args():
         'It also allows nested list/tuple values, e.g. key="[(a,b),(c,d)]" '
         'Note that the quotation marks are necessary and that no white space '
         'is allowed.')
+    parser.add_argument(
+        '--launcher',
+        choices=['none', 'pytorch', 'slurm', 'mpi'],
+        default='none',
+        help='job launcher')
+    parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     return args
 
@@ -733,6 +741,7 @@ def main():
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
 
+    init_dist('pytorch', **cfg.dist_params)
     dataset = build_dataset(cfg.data.test)
     
     dataset.is_vis_on_test = True #TODO, this is a hack
@@ -759,13 +768,21 @@ def main():
         img_metas = data['img_metas'][0].data[0]
         break
 
+    
     model = build_model(
         cfg.model,
         train_cfg=cfg.get('train_cfg'),
         test_cfg=cfg.get('test_cfg'))
     if torch.cuda.is_available():
         model.cuda()
-    model = MMDataParallel(model, device_ids=[0])
+    # VAD
+    # model = MMDataParallel(model, device_ids=[0])
+
+    # uniad
+    model = MMDistributedDataParallel(
+            model.cuda(),
+            device_ids=[torch.cuda.current_device()],
+            broadcast_buffers=False)
     model.eval()
     # 用于判断 model是否有forward_dummy方法
     # if hasattr(model, 'forward_dummy'):

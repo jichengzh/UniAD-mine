@@ -178,8 +178,10 @@ def main():
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
         distributed = False
+        print('Use single GPU testing')
     else:
         distributed = True
+        print(f'Use launcher: {args.launcher}')
         init_dist(args.launcher, **cfg.dist_params)
 
     # set random seeds
@@ -258,4 +260,9 @@ def main():
 
 
 if __name__ == '__main__':
+    import debugpy
+    # debugpy.listen(12361)
+    print('wait debugger')
     main()
+    debugpy.wait_for_client()
+    print("Debugger Attached")

@@ -38,6 +38,7 @@ input_modality = dict(
 _dim_ = 256
 _pos_dim_ = _dim_ // 2
 _ffn_dim_ = _dim_ * 2
+# _num_levels_ = 5
 _num_levels_ = 4
 bev_h_ = 200
 bev_w_ = 200
@@ -89,24 +90,31 @@ model = dict(
     pc_range=point_cloud_range,
     img_backbone=dict(
         type="ResNet",
-        depth=101,
+        depth=152,
         num_stages=4,
+        # out_indices=(0, 1, 2, 3),
         out_indices=(1, 2, 3),
         frozen_stages=4,
         norm_cfg=dict(type="BN2d", requires_grad=False),
         norm_eval=True,
         style="caffe",
+        init_cfg=dict(                      # ★ 加这一行
+            type='Pretrained',
+            checkpoint='ckpts/resnet152-394f9c45.pth'
+        ),
         dcn=dict(
             type="DCNv2", deform_groups=1, fallback_on_stride=False
-        ),  # original DCNv2 will print log when perform load_state_dict
+        ),  # original DCNv2 will print log when perform load_state_dict 是否使用DeformableConv2d实现
         stage_with_dcn=(False, False, True, True),
     ),
     img_neck=dict(
         type="FPN",
+        # in_channels=[256, 512, 1024, 2048],
         in_channels=[512, 1024, 2048],
         out_channels=_dim_,
         start_level=0,
         add_extra_convs="on_output",
+        # num_outs=5,
         num_outs=4,
         relu_before_extra_convs=True,
     ),
@@ -158,6 +166,7 @@ model = dict(
         fut_steps=fut_steps,
         transformer=dict(
             type="PerceptionTransformer",
+            num_feature_levels=_num_levels_,
             rotate_prev_bev=True,
             use_shift=True,
             use_can_bus=True,
@@ -481,7 +490,7 @@ test_pipeline = [
     ),
 ]
 data = dict(
-    samples_per_gpu=1,
+    samples_per_gpu=1, # 控制batch大小
     workers_per_gpu=8,
     train=dict(
         type=dataset_type,
@@ -584,6 +593,7 @@ log_config = dict(
     interval=10, hooks=[dict(type="TextLoggerHook"), dict(type="TensorboardLoggerHook")]
 )
 checkpoint_config = dict(interval=1)
+# load_from = "ckpts/resnet152-394f9c45.pth"
 load_from = "ckpts/bevformer_r101_dcn_24ep.pth"
 
 find_unused_parameters = True

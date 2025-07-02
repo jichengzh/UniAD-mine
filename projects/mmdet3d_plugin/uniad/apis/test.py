@@ -16,6 +16,7 @@ from ..dense_heads.planning_head_plugin import PlanningMetric
 import mmcv
 import numpy as np
 import pycocotools.mask as mask_util
+from tools.analysis_tools.get_flops import get_model_complexity_info
 
 def custom_encode_mask_results(mask_results):
     """Encode bitmap mask to RLE code. Semantic Masks only
@@ -86,8 +87,22 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
     have_mask = False
     num_occ = 0
     for i, data in enumerate(data_loader):
+        
         with torch.no_grad():
+        # ------------------------------ 计算flops ------------------------------
+        #     result = model(return_loss=False, rescale=True, **data)
+        #     flops, params = get_model_complexity_info(model, data)
+        #     split_line = '=' * 30
+        #     print(f'{split_line}\nInput shape: [1280, 720]\n'
+        #         f'Flops: {flops}\nParams: {params}\n{split_line}')
+        #     print('!!!Please be cautious if you use the results in papers. '
+        #         'You may need to check if all ops are supported and verify that the '
+        #         'flops computation is correct.')
+
+        # !!!!注意下面还有一个注释的break
+        # ------------------------------ 计算flops ------------------------------
             result = model(return_loss=False, rescale=True, **data)
+        
 
             # EVAL planning
             if eval_planning:
@@ -139,10 +154,12 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
             else:
                 batch_size = len(result)
                 bbox_results.extend(result)
+        
 
         if rank == 0:
             for _ in range(batch_size * world_size):
                 prog_bar.update()
+        # break # 跑一遍就停止
 
     # collect results from all ranks
     if gpu_collect:
